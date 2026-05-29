@@ -5,9 +5,16 @@ PROD_HOST="${PROD_HOST:-deploy-user@example-host.invalid}"
 PROD_HOSTNAME="${PROD_HOSTNAME:-production-host}"
 PROD_APP_DIR="${PROD_APP_DIR:-/srv/graphics-visible}"
 
+if [[ -z "${SSH_BIN:-}" ]]; then
+  SSH_BIN="ssh"
+  if grep -qi microsoft /proc/version 2>/dev/null && [[ -x /mnt/c/Windows/System32/OpenSSH/ssh.exe ]]; then
+    SSH_BIN="/mnt/c/Windows/System32/OpenSSH/ssh.exe"
+  fi
+fi
+
 if [[ "${DEPLOY_TARGET:-prod}" == "prod" && "$(hostname)" != "$PROD_HOSTNAME" ]]; then
   echo "Deploying on $PROD_HOST..."
-  ssh "$PROD_HOST" "cd '$PROD_APP_DIR' && git pull --ff-only origin main && ./redeploy.sh"
+  "$SSH_BIN" "$PROD_HOST" "cd '$PROD_APP_DIR' && git pull --ff-only origin main && ./redeploy.sh"
   exit 0
 fi
 
