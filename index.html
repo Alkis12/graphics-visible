@@ -1,0 +1,576 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>DataLens charts</title>
+  <style>
+    :root {
+      color-scheme: dark;
+      --bg: #101318;
+      --panel: #171c23;
+      --panel-2: #202731;
+      --border: #323c48;
+      --text: #eef3f8;
+      --muted: #9aa6b5;
+      --accent: #4aa3ff;
+      --warning: #f7b955;
+      --chart-bg: #1f2022;
+      --max-width: 1180px;
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    html {
+      height: 100%;
+      background: var(--bg);
+      overflow: hidden;
+    }
+
+    body {
+      margin: 0;
+      height: 100%;
+      overflow-x: hidden;
+      overflow-y: hidden;
+      background: var(--bg);
+      color: var(--text);
+      font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    }
+
+    .app {
+      height: 100vh;
+      display: grid;
+      grid-template-rows: auto minmax(0, 1fr);
+    }
+
+    .file-warning {
+      padding: 10px 18px;
+      color: #121416;
+      background: var(--warning);
+      font-weight: 700;
+    }
+
+    .toolbar {
+      z-index: 10;
+      background: rgba(23, 28, 35, 0.98);
+      border-bottom: 1px solid var(--border);
+    }
+
+    .toolbar-inner {
+      width: 100%;
+      max-width: var(--max-width);
+      margin: 0 auto;
+      padding: 16px clamp(14px, 2.8vw, 28px);
+      display: grid;
+      grid-template-columns: minmax(220px, 420px) minmax(360px, 1fr);
+      gap: 14px 18px;
+      align-items: end;
+    }
+
+    .field {
+      min-width: 0;
+      display: grid;
+      gap: 7px;
+    }
+
+    label {
+      color: var(--muted);
+      font-size: 12px;
+      font-weight: 800;
+      line-height: 1.2;
+      text-transform: uppercase;
+    }
+
+    select,
+    input {
+      width: 100%;
+      min-width: 0;
+      height: 48px;
+      border: 1px solid var(--border);
+      border-radius: 7px;
+      background: #0f1318;
+      color: var(--text);
+      font: inherit;
+      font-size: 18px;
+      outline: none;
+      padding: 9px 13px;
+    }
+
+    select {
+      appearance: none;
+      background-image:
+        linear-gradient(45deg, transparent 50%, var(--text) 50%),
+        linear-gradient(135deg, var(--text) 50%, transparent 50%);
+      background-position:
+        calc(100% - 22px) calc(50% - 3px),
+        calc(100% - 14px) calc(50% - 3px);
+      background-repeat: no-repeat;
+      background-size: 8px 8px;
+      padding-right: 48px;
+    }
+
+    select:focus,
+    input:focus,
+    button:focus-visible {
+      border-color: var(--accent);
+      box-shadow: 0 0 0 3px rgba(74, 163, 255, 0.2);
+    }
+
+    .event-controls {
+      display: grid;
+      grid-template-columns: minmax(220px, 1fr) 54px 54px minmax(54px, auto);
+      gap: 10px;
+      align-items: center;
+    }
+
+    .icon-button {
+      width: 54px;
+      height: 48px;
+      border: 1px solid var(--border);
+      border-radius: 7px;
+      color: var(--text);
+      background: var(--panel-2);
+      font: inherit;
+      font-size: 24px;
+      line-height: 1;
+      cursor: pointer;
+      transition: background 120ms ease, border-color 120ms ease, opacity 120ms ease;
+    }
+
+    .icon-button:hover {
+      border-color: var(--accent);
+      background: #243140;
+    }
+
+    .icon-button:disabled {
+      opacity: 0.45;
+      cursor: not-allowed;
+    }
+
+    .position {
+      color: var(--muted);
+      font-size: 14px;
+      white-space: nowrap;
+      text-align: right;
+    }
+
+    .workspace {
+      min-width: 0;
+      min-height: 0;
+      overflow-y: auto;
+      overflow-x: hidden;
+      padding: 18px clamp(12px, 2.8vw, 28px) 28px;
+      overscroll-behavior: contain;
+    }
+
+    .charts {
+      width: 100%;
+      max-width: var(--max-width);
+      margin: 0 auto;
+      display: grid;
+      gap: 18px;
+    }
+
+    .chart {
+      min-width: 0;
+      border: 1px solid #252c35;
+      border-radius: 8px;
+      overflow: hidden;
+      background: var(--chart-bg);
+    }
+
+    .chart-title {
+      margin: 0;
+      padding: 13px 16px 8px;
+      color: #d6d8dc;
+      background: var(--chart-bg);
+      font-size: 18px;
+      line-height: 1.25;
+      font-weight: 800;
+    }
+
+    .chart-frame-wrap {
+      position: relative;
+      height: 430px;
+      background: var(--chart-bg);
+    }
+
+    .chart-frame {
+      display: block;
+      width: 100%;
+      height: 100%;
+      border: 0;
+      background: var(--chart-bg);
+      pointer-events: none;
+    }
+
+    @media (min-width: 980px) {
+      .chart-frame {
+        height: 100%;
+      }
+
+      .chart-frame-wrap {
+        height: 460px;
+      }
+    }
+
+    @media (max-width: 860px) {
+      .toolbar-inner {
+        grid-template-columns: 1fr;
+      }
+    }
+
+    @media (max-width: 560px) {
+      .toolbar-inner {
+        padding: 14px;
+        gap: 12px;
+      }
+
+      select,
+      input {
+        height: 46px;
+        font-size: 16px;
+      }
+
+      .event-controls {
+        grid-template-columns: minmax(0, 1fr) 48px 48px;
+        gap: 8px;
+      }
+
+      .position {
+        grid-column: 1 / -1;
+        justify-self: end;
+        padding-right: 2px;
+      }
+
+      .icon-button {
+        width: 48px;
+        height: 46px;
+      }
+
+      .workspace {
+        padding: 12px 10px 22px;
+      }
+
+      .charts {
+        gap: 12px;
+      }
+
+      .chart-title {
+        padding: 12px 14px 6px;
+        font-size: 16px;
+      }
+
+      .chart-frame-wrap {
+        height: 400px;
+      }
+    }
+
+    @media (max-width: 390px) {
+      .toolbar-inner {
+        padding: 12px 10px;
+      }
+
+      .event-controls {
+        grid-template-columns: minmax(0, 1fr) 44px 44px;
+      }
+
+      .icon-button {
+        width: 44px;
+      }
+
+      .workspace {
+        padding-inline: 6px;
+      }
+
+      .chart-frame-wrap {
+        height: 380px;
+      }
+    }
+  </style>
+</head>
+<body tabindex="-1">
+  <main class="app">
+    <div class="file-warning" id="fileWarning" hidden>Откройте страницу через http://localhost:8080, не как локальный файл.</div>
+
+    <section class="toolbar" aria-label="Фильтры графиков">
+      <div class="toolbar-inner">
+        <div class="field">
+          <label for="ticketCategory">ticket_category</label>
+          <select id="ticketCategory">
+            <option value="">Все</option>
+            <option value="VIP">VIP</option>
+            <option value="Балкон Общая">Балкон Общая</option>
+            <option value="Партер 1 Фланг">Партер 1 Фланг</option>
+            <option value="Партер 1 Центр">Партер 1 Центр</option>
+            <option value="Партер 2 Общая">Партер 2 Общая</option>
+            <option value="Партер 3 Общая">Партер 3 Общая</option>
+          </select>
+        </div>
+
+        <div class="field">
+          <label for="eventInput">event</label>
+          <div class="event-controls">
+            <input id="eventInput" list="eventOptions" placeholder="2026-07-01 20:00:00" autocomplete="off" required>
+            <button class="icon-button" id="prevEvent" type="button" title="Предыдущее событие" aria-label="Предыдущее событие">‹</button>
+            <button class="icon-button" id="nextEvent" type="button" title="Следующее событие" aria-label="Следующее событие">›</button>
+            <div class="position" id="position">0 / 0</div>
+          </div>
+          <datalist id="eventOptions"></datalist>
+        </div>
+      </div>
+    </section>
+
+    <section class="workspace">
+      <div class="charts">
+        <article class="chart">
+          <h2 class="chart-title">Отслеживание цены продаж</h2>
+          <div class="chart-frame-wrap">
+            <iframe class="chart-frame" id="priceFrame" title="Отслеживание цены продаж" allowfullscreen></iframe>
+          </div>
+        </article>
+
+        <article class="chart">
+          <h2 class="chart-title">Отслеживание билетов</h2>
+          <div class="chart-frame-wrap">
+            <iframe class="chart-frame" id="ticketsFrame" title="Отслеживание билетов" allowfullscreen></iframe>
+          </div>
+        </article>
+      </div>
+    </section>
+  </main>
+
+  <script>
+    const CHARTS = [
+      {
+        frameId: "priceFrame",
+        baseUrl: "https://datalens.yandex/6meh0mfwrs5gq",
+      },
+      {
+        frameId: "ticketsFrame",
+        baseUrl: "https://datalens.yandex/3jbj88gnek4un",
+      },
+    ];
+
+    const PARAMS = {
+      category: "ticket_category_tdzf",
+      event: "event_id_internal_9r0j",
+    };
+
+    const EVENT_OPTIONS = [
+      "2026-05-28 20:00:00",
+      "2026-05-29 20:00:00",
+      "2026-05-30 20:00:00",
+      "2026-05-31 18:00:00",
+      "2026-06-02 20:00:00",
+      "2026-06-03 20:00:00",
+      "2026-06-04 20:00:00",
+      "2026-06-05 20:00:00",
+      "2026-06-06 20:00:00",
+      "2026-06-07 18:00:00",
+      "2026-06-09 20:00:00",
+      "2026-06-10 20:00:00",
+      "2026-06-11 20:00:00",
+      "2026-06-12 20:00:00",
+      "2026-06-13 20:00:00",
+      "2026-06-14 18:00:00",
+      "2026-06-16 20:00:00",
+      "2026-06-17 20:00:00",
+      "2026-06-18 20:00:00",
+      "2026-06-19 20:00:00",
+      "2026-06-20 20:00:00",
+      "2026-06-21 18:00:00",
+      "2026-06-23 20:00:00",
+      "2026-06-24 20:00:00",
+      "2026-06-25 20:00:00",
+      "2026-06-26 20:00:00",
+      "2026-06-27 20:00:00",
+      "2026-06-28 18:00:00",
+      "2026-06-30 20:00:00",
+      "2026-07-01 20:00:00",
+      "2026-07-02 20:00:00",
+      "2026-07-03 20:00:00",
+      "2026-07-04 20:00:00",
+      "2026-07-05 18:00:00",
+      "2026-07-07 20:00:00",
+      "2026-07-08 20:00:00",
+      "2026-07-09 20:00:00",
+      "2026-07-10 20:00:00",
+      "2026-07-11 20:00:00",
+      "2026-07-12 18:00:00",
+      "2026-07-14 20:00:00",
+      "2026-07-15 20:00:00",
+      "2026-07-16 20:00:00",
+      "2026-07-17 20:00:00",
+      "2026-07-18 20:00:00",
+      "2026-07-19 18:00:00",
+      "2026-07-21 20:00:00",
+      "2026-07-22 20:00:00",
+      "2026-07-23 20:00:00",
+      "2026-07-24 20:00:00",
+      "2026-07-25 20:00:00",
+      "2026-07-26 18:00:00",
+      "2026-07-28 20:00:00",
+      "2026-07-29 20:00:00",
+      "2026-07-30 20:00:00",
+      "2026-07-31 20:00:00",
+    ];
+
+    const selectors = {
+      fileWarning: document.getElementById("fileWarning"),
+      category: document.getElementById("ticketCategory"),
+      eventInput: document.getElementById("eventInput"),
+      eventOptions: document.getElementById("eventOptions"),
+      prev: document.getElementById("prevEvent"),
+      next: document.getElementById("nextEvent"),
+      position: document.getElementById("position"),
+      frames: CHARTS.map((chart) => document.getElementById(chart.frameId)),
+    };
+
+    let currentEventIndex = 0;
+
+    if (window.location.protocol === "file:") {
+      selectors.fileWarning.hidden = false;
+    }
+
+    function fillEventOptions() {
+      selectors.eventOptions.innerHTML = "";
+      EVENT_OPTIONS.forEach((eventValue) => {
+        const option = document.createElement("option");
+        option.value = eventValue;
+        selectors.eventOptions.appendChild(option);
+      });
+    }
+
+    function getEventIndex(value) {
+      return EVENT_OPTIONS.findIndex((eventValue) => eventValue === value);
+    }
+
+    function syncIndexFromInput() {
+      const index = getEventIndex(selectors.eventInput.value.trim());
+      if (index >= 0) {
+        currentEventIndex = index;
+      }
+      return index;
+    }
+
+    function buildChartUrl(baseUrl) {
+      const url = new URL(baseUrl);
+      url.searchParams.set(PARAMS.event, selectors.eventInput.value.trim());
+      if (selectors.category.value) {
+        url.searchParams.set(PARAMS.category, selectors.category.value);
+      } else {
+        url.searchParams.set(PARAMS.category, "");
+      }
+      url.searchParams.set("_embedded", "1");
+      url.searchParams.set("_no_controls", "1");
+      url.searchParams.set("_theme", "dark");
+      return url.toString();
+    }
+
+    function updateNavigation() {
+      const knownEvent = syncIndexFromInput();
+      selectors.prev.disabled = EVENT_OPTIONS.length < 2 || currentEventIndex <= 0;
+      selectors.next.disabled = EVENT_OPTIONS.length < 2 || currentEventIndex >= EVENT_OPTIONS.length - 1;
+      selectors.position.textContent = knownEvent >= 0
+        ? `${currentEventIndex + 1} / ${EVENT_OPTIONS.length}`
+        : `вне списка / ${EVENT_OPTIONS.length}`;
+    }
+
+    function renderCharts() {
+      updateNavigation();
+      CHARTS.forEach((chart, index) => {
+        const nextSrc = buildChartUrl(chart.baseUrl);
+        if (selectors.frames[index].src !== nextSrc) {
+          selectors.frames[index].src = nextSrc;
+        }
+      });
+      document.body.focus();
+    }
+
+    function moveEvent(direction) {
+      if (!EVENT_OPTIONS.length) {
+        return;
+      }
+
+      syncIndexFromInput();
+      const nextIndex = Math.min(Math.max(currentEventIndex + direction, 0), EVENT_OPTIONS.length - 1);
+      if (nextIndex === currentEventIndex && selectors.eventInput.value === EVENT_OPTIONS[nextIndex]) {
+        return;
+      }
+
+      currentEventIndex = nextIndex;
+      selectors.eventInput.value = EVENT_OPTIONS[currentEventIndex];
+      renderCharts();
+    }
+
+    function setInitialValues() {
+      const params = new URLSearchParams(window.location.search);
+      const categoryFromUrl = params.get("category");
+      const eventFromUrl = params.get("event");
+
+      if (categoryFromUrl !== null) {
+        selectors.category.value = categoryFromUrl;
+      }
+
+      if (eventFromUrl && getEventIndex(eventFromUrl) >= 0) {
+        currentEventIndex = getEventIndex(eventFromUrl);
+        selectors.eventInput.value = eventFromUrl;
+        return;
+      }
+
+      const now = new Date();
+      const todayPrefix = [
+        now.getFullYear(),
+        String(now.getMonth() + 1).padStart(2, "0"),
+        String(now.getDate()).padStart(2, "0"),
+      ].join("-");
+      const todayIndex = EVENT_OPTIONS.findIndex((eventValue) => eventValue.startsWith(todayPrefix));
+      if (todayIndex >= 0) {
+        currentEventIndex = todayIndex;
+        selectors.eventInput.value = EVENT_OPTIONS[todayIndex];
+        return;
+      }
+
+      const nextIndex = EVENT_OPTIONS.findIndex((eventValue) => eventValue.slice(0, 10) >= todayPrefix);
+      currentEventIndex = nextIndex >= 0 ? nextIndex : EVENT_OPTIONS.length - 1;
+      selectors.eventInput.value = EVENT_OPTIONS[currentEventIndex] || "";
+    }
+
+    selectors.prev.addEventListener("click", () => moveEvent(-1));
+    selectors.next.addEventListener("click", () => moveEvent(1));
+    selectors.category.addEventListener("change", renderCharts);
+    selectors.eventInput.addEventListener("change", renderCharts);
+    selectors.eventInput.addEventListener("input", updateNavigation);
+    selectors.eventInput.addEventListener("keydown", (event) => {
+      if (event.key === "Enter") {
+        event.preventDefault();
+        renderCharts();
+      }
+    });
+
+    window.addEventListener("keydown", (event) => {
+      if (event.key === "ArrowLeft") {
+        event.preventDefault();
+        moveEvent(-1);
+      }
+
+      if (event.key === "ArrowRight") {
+        event.preventDefault();
+        moveEvent(1);
+      }
+    });
+
+    window.addEventListener("pointerdown", (event) => {
+      if (event.target.tagName !== "INPUT" && event.target.tagName !== "SELECT" && event.target.tagName !== "BUTTON") {
+        document.body.focus();
+      }
+    });
+    fillEventOptions();
+    setInitialValues();
+    renderCharts();
+  </script>
+</body>
+</html>
