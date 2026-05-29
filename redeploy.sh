@@ -1,6 +1,16 @@
 #!/usr/bin/env bash
 set -Eeuo pipefail
 
+PROD_HOST="${PROD_HOST:-deploy-user@example-host.invalid}"
+PROD_HOSTNAME="${PROD_HOSTNAME:-production-host}"
+PROD_APP_DIR="${PROD_APP_DIR:-/srv/graphics-visible}"
+
+if [[ "${DEPLOY_TARGET:-prod}" == "prod" && "$(hostname)" != "$PROD_HOSTNAME" ]]; then
+  echo "Deploying on $PROD_HOST..."
+  ssh "$PROD_HOST" "cd '$PROD_APP_DIR' && git pull --ff-only origin main && ./redeploy.sh"
+  exit 0
+fi
+
 APP_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 CONTAINER_NAME="graphics_visible"
 IMAGE_NAME="graphics-visible:latest"
