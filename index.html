@@ -311,20 +311,26 @@
         </div>
 
         <div class="field">
-          <label for="eventInput">event</label>
+          <label for="eventDate">event date</label>
           <div class="event-controls">
-            <input id="eventInput" list="eventOptions" placeholder="2026-07-01 20:00:00" autocomplete="off" required>
+            <input id="eventDate" type="date" autocomplete="off" required>
             <button class="icon-button" id="prevEvent" type="button" title="Предыдущее событие" aria-label="Предыдущее событие">‹</button>
             <button class="icon-button" id="nextEvent" type="button" title="Следующее событие" aria-label="Следующее событие">›</button>
             <div class="position" id="position">0 / 0</div>
           </div>
-          <datalist id="eventOptions"></datalist>
         </div>
       </div>
     </section>
 
     <section class="workspace">
       <div class="charts">
+        <article class="chart">
+          <h2 class="chart-title">График по мероприятию</h2>
+          <div class="chart-frame-wrap">
+            <iframe class="chart-frame" id="eventFrame" title="График по мероприятию" allowfullscreen></iframe>
+          </div>
+        </article>
+
         <article class="chart">
           <h2 class="chart-title">Отслеживание цены продаж</h2>
           <div class="chart-frame-wrap">
@@ -344,6 +350,10 @@
 
   <script>
     const CHARTS = [
+      {
+        frameId: "eventFrame",
+        baseUrl: "https://datalens.yandex/euo4f8jr1ff8y",
+      },
       {
         frameId: "priceFrame",
         baseUrl: "https://datalens.yandex/6meh0mfwrs5gq",
@@ -421,8 +431,7 @@
     const selectors = {
       fileWarning: document.getElementById("fileWarning"),
       category: document.getElementById("ticketCategory"),
-      eventInput: document.getElementById("eventInput"),
-      eventOptions: document.getElementById("eventOptions"),
+      eventDate: document.getElementById("eventDate"),
       prev: document.getElementById("prevEvent"),
       next: document.getElementById("nextEvent"),
       position: document.getElementById("position"),
@@ -430,26 +439,34 @@
     };
 
     let currentEventIndex = 0;
+    const EVENT_DATE_TO_INDEX = new Map(EVENT_OPTIONS.map((eventValue, index) => [getEventDate(eventValue), index]));
 
     if (window.location.protocol === "file:") {
       selectors.fileWarning.hidden = false;
     }
 
-    function fillEventOptions() {
-      selectors.eventOptions.innerHTML = "";
-      EVENT_OPTIONS.forEach((eventValue) => {
-        const option = document.createElement("option");
-        option.value = eventValue;
-        selectors.eventOptions.appendChild(option);
-      });
+    function getEventDate(eventValue) {
+      return eventValue.slice(0, 10);
     }
 
     function getEventIndex(value) {
       return EVENT_OPTIONS.findIndex((eventValue) => eventValue === value);
     }
 
+    function getEventIndexByDate(value) {
+      return EVENT_DATE_TO_INDEX.has(value) ? EVENT_DATE_TO_INDEX.get(value) : -1;
+    }
+
+    function getSelectedEventValue() {
+      const index = getEventIndexByDate(selectors.eventDate.value);
+      if (index >= 0) {
+        return EVENT_OPTIONS[index];
+      }
+      return selectors.eventDate.value ? `${selectors.eventDate.value} 20:00:00` : "";
+    }
+
     function syncIndexFromInput() {
-      const index = getEventIndex(selectors.eventInput.value.trim());
+      const index = getEventIndexByDate(selectors.eventDate.value);
       if (index >= 0) {
         currentEventIndex = index;
       }
@@ -458,7 +475,7 @@
 
     function buildChartUrl(baseUrl) {
       const url = new URL(baseUrl);
-      url.searchParams.set(PARAMS.event, selectors.eventInput.value.trim());
+      url.searchParams.set(PARAMS.event, getSelectedEventValue());
       if (selectors.category.value) {
         url.searchParams.set(PARAMS.category, selectors.category.value);
       } else {
@@ -497,12 +514,12 @@
 
       syncIndexFromInput();
       const nextIndex = Math.min(Math.max(currentEventIndex + direction, 0), EVENT_OPTIONS.length - 1);
-      if (nextIndex === currentEventIndex && selectors.eventInput.value === EVENT_OPTIONS[nextIndex]) {
+      if (nextIndex === currentEventIndex && selectors.eventDate.value === getEventDate(EVENT_OPTIONS[nextIndex])) {
         return;
       }
 
       currentEventIndex = nextIndex;
-      selectors.eventInput.value = EVENT_OPTIONS[currentEventIndex];
+      selectors.eventDate.value = getEventDate(EVENT_OPTIONS[currentEventIndex]);
       renderCharts();
     }
 
@@ -517,7 +534,7 @@
 
       if (eventFromUrl && getEventIndex(eventFromUrl) >= 0) {
         currentEventIndex = getEventIndex(eventFromUrl);
-        selectors.eventInput.value = eventFromUrl;
+        selectors.eventDate.value = getEventDate(eventFromUrl);
         return;
       }
 
@@ -530,21 +547,34 @@
       const todayIndex = EVENT_OPTIONS.findIndex((eventValue) => eventValue.startsWith(todayPrefix));
       if (todayIndex >= 0) {
         currentEventIndex = todayIndex;
-        selectors.eventInput.value = EVENT_OPTIONS[todayIndex];
+        selectors.eventDate.value = getEventDate(EVENT_OPTIONS[todayIndex]);
         return;
       }
 
       const nextIndex = EVENT_OPTIONS.findIndex((eventValue) => eventValue.slice(0, 10) >= todayPrefix);
       currentEventIndex = nextIndex >= 0 ? nextIndex : EVENT_OPTIONS.length - 1;
-      selectors.eventInput.value = EVENT_OPTIONS[currentEventIndex] || "";
+      selectors.eventDate.value = EVENT_OPTIONS[currentEventIndex] ? getEventDate(EVENT_OPTIONS[currentEventIndex]) : "";
+    }
+
+    function setupEventDatePicker() {
+      if (EVENT_OPTIONS.length) {
+        selectors.eventDate.min = getEventDate(EVENT_OPTIONS[0]);
+        selectors.eventDate.max = getEventDate(EVENT_OPTIONS[EVENT_OPTIONS.length - 1]);
+      }
+
+      selectors.eventDate.addEventListener("click", () => {
+        if (typeof selectors.eventDate.showPicker === "function") {
+          selectors.eventDate.showPicker();
+        }
+      });
     }
 
     selectors.prev.addEventListener("click", () => moveEvent(-1));
     selectors.next.addEventListener("click", () => moveEvent(1));
     selectors.category.addEventListener("change", renderCharts);
-    selectors.eventInput.addEventListener("change", renderCharts);
-    selectors.eventInput.addEventListener("input", updateNavigation);
-    selectors.eventInput.addEventListener("keydown", (event) => {
+    selectors.eventDate.addEventListener("change", renderCharts);
+    selectors.eventDate.addEventListener("input", updateNavigation);
+    selectors.eventDate.addEventListener("keydown", (event) => {
       if (event.key === "Enter") {
         event.preventDefault();
         renderCharts();
@@ -568,7 +598,7 @@
         document.body.focus();
       }
     });
-    fillEventOptions();
+    setupEventDatePicker();
     setInitialValues();
     renderCharts();
   </script>
