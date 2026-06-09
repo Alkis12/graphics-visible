@@ -156,8 +156,6 @@
       const url = new URL(BASE_DASHBOARD_URL);
       url.searchParams.set("_embedded", "1");
       url.searchParams.set("_no_controls", "1");
-      url.searchParams.set("_theme", "dark");
-      url.searchParams.set("_ts", String(Date.now()));
       return url.toString();
     }
 
