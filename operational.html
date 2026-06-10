@@ -137,7 +137,7 @@
       </div>
       <div class="actions">
         <button class="button" type="button" id="refreshButton">Обновить</button>
-        <a class="button" href="https://datalens.yandex/vb36ygwh0m12f" target="_blank" rel="noopener">Открыть в DataLens</a>
+        <a class="button" href="https://datalens.yandex/i0yioelotv302?event_id_internal_9r0j=&ticket_category_tdzf=" target="_blank" rel="noopener">Открыть в DataLens</a>
       </div>
     </header>
 
@@ -147,13 +147,15 @@
   </main>
 
   <script>
-    const BASE_DASHBOARD_URL = "https://datalens.ru/preview/vb36ygwh0m12f";
+    const BASE_DASHBOARD_URL = "https://datalens.yandex/i0yioelotv302";
     const frame = document.getElementById("dashboardFrame");
     const status = document.getElementById("status");
     const refreshButton = document.getElementById("refreshButton");
 
     function buildDashboardUrl() {
       const url = new URL(BASE_DASHBOARD_URL);
+      url.searchParams.set("event_id_internal_9r0j", "");
+      url.searchParams.set("ticket_category_tdzf", "");
       url.searchParams.set("_embedded", "1");
       url.searchParams.set("_no_controls", "1");
       return url.toString();
