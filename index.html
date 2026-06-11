@@ -141,6 +141,32 @@
       cursor: pointer;
     }
 
+    .date-value {
+      min-width: 0;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .weekday-badge {
+      flex: 0 0 auto;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      min-width: 96px;
+      height: 28px;
+      padding: 0 10px;
+      border: 1px solid rgba(74, 163, 255, 0.42);
+      border-radius: 999px;
+      color: #dcecff;
+      background: #17304a;
+      font-size: 13px;
+      font-weight: 850;
+      line-height: 1;
+      text-transform: capitalize;
+      white-space: nowrap;
+    }
+
     .date-trigger::after {
       content: "";
       width: 9px;
@@ -311,6 +337,34 @@
       background: var(--chart-bg);
     }
 
+    .block-divider {
+      height: 24px;
+      position: relative;
+      margin: 0;
+    }
+
+    .block-divider::before {
+      content: "";
+      position: absolute;
+      top: 50%;
+      left: 0;
+      right: 0;
+      height: 1px;
+      background: #323c48;
+    }
+
+    .block-divider::after {
+      content: "";
+      position: absolute;
+      top: calc(50% - 2px);
+      left: 50%;
+      width: 112px;
+      height: 4px;
+      border-radius: 999px;
+      background: #4aa3ff;
+      transform: translateX(-50%);
+    }
+
     .chart-title {
       margin: 0;
       padding: 13px 16px 8px;
@@ -363,6 +417,13 @@
       .date-trigger {
         height: 46px;
         font-size: 16px;
+      }
+
+      .weekday-badge {
+        min-width: 78px;
+        height: 26px;
+        padding-inline: 8px;
+        font-size: 12px;
       }
 
       .event-controls {
@@ -449,7 +510,10 @@
           <label for="eventDate">event date</label>
           <div class="event-controls">
             <div class="date-picker" id="eventDatePicker">
-              <button class="date-trigger" id="eventDate" type="button" aria-haspopup="dialog" aria-expanded="false"></button>
+              <button class="date-trigger" id="eventDate" type="button" aria-haspopup="dialog" aria-expanded="false">
+                <span class="date-value" id="eventDateValue"></span>
+                <span class="weekday-badge" id="weekdayBadge"></span>
+              </button>
               <div class="calendar-popover" id="eventCalendar" role="dialog" aria-label="event date" hidden>
                 <div class="calendar-header">
                   <button class="calendar-nav" id="prevMonth" type="button" aria-label="Предыдущий месяц">‹</button>
@@ -479,23 +543,32 @@
     <section class="workspace">
       <div class="charts">
         <article class="chart">
-          <h2 class="chart-title">График по мероприятию</h2>
+          <h2 class="chart-title">Отслеживание билетов MAX</h2>
           <div class="chart-frame-wrap">
-            <iframe class="chart-frame" id="eventFrame" title="График по мероприятию" allowfullscreen></iframe>
+            <iframe class="chart-frame" id="maxTicketsFrame" title="Отслеживание билетов MAX" allowfullscreen></iframe>
           </div>
         </article>
 
         <article class="chart">
-          <h2 class="chart-title">Отслеживание цены продаж</h2>
+          <h2 class="chart-title">Отслеживание цены продаж всех категорий MAX</h2>
           <div class="chart-frame-wrap">
-            <iframe class="chart-frame" id="priceFrame" title="Отслеживание цены продаж" allowfullscreen></iframe>
+            <iframe class="chart-frame" id="maxPriceFrame" title="Отслеживание цены продаж всех категорий MAX" allowfullscreen></iframe>
           </div>
         </article>
+
+        <div class="block-divider" aria-hidden="true"></div>
 
         <article class="chart">
           <h2 class="chart-title">Отслеживание билетов</h2>
           <div class="chart-frame-wrap">
             <iframe class="chart-frame" id="ticketsFrame" title="Отслеживание билетов" allowfullscreen></iframe>
+          </div>
+        </article>
+
+        <article class="chart">
+          <h2 class="chart-title">Отслеживание всех категорий</h2>
+          <div class="chart-frame-wrap">
+            <iframe class="chart-frame" id="allCategoriesFrame" title="Отслеживание всех категорий" allowfullscreen></iframe>
           </div>
         </article>
       </div>
@@ -505,16 +578,20 @@
   <script>
     const CHARTS = [
       {
-        frameId: "eventFrame",
-        baseUrl: "https://datalens.yandex/euo4f8jr1ff8y",
+        frameId: "maxTicketsFrame",
+        baseUrl: "https://datalens.yandex/i1bvc2rk1gyw2",
       },
       {
-        frameId: "priceFrame",
-        baseUrl: "https://datalens.yandex/6meh0mfwrs5gq",
+        frameId: "maxPriceFrame",
+        baseUrl: "https://datalens.yandex/l4f7v9hp1g9a5",
       },
       {
         frameId: "ticketsFrame",
         baseUrl: "https://datalens.yandex/3jbj88gnek4un",
+      },
+      {
+        frameId: "allCategoriesFrame",
+        baseUrl: "https://datalens.yandex/euo4f8jr1ff8y",
       },
     ];
 
@@ -586,6 +663,8 @@
       fileWarning: document.getElementById("fileWarning"),
       category: document.getElementById("ticketCategory"),
       eventDate: document.getElementById("eventDate"),
+      eventDateValue: document.getElementById("eventDateValue"),
+      weekdayBadge: document.getElementById("weekdayBadge"),
       eventDatePicker: document.getElementById("eventDatePicker"),
       eventCalendar: document.getElementById("eventCalendar"),
       calendarMonth: document.getElementById("calendarMonth"),
@@ -603,6 +682,7 @@
     let calendarViewDate = null;
     const EVENT_DATE_TO_INDEX = new Map(EVENT_OPTIONS.map((eventValue, index) => [getEventDate(eventValue), index]));
     const MONTH_FORMATTER = new Intl.DateTimeFormat("ru-RU", { month: "long", year: "numeric" });
+    const WEEKDAY_FORMATTER = new Intl.DateTimeFormat("ru-RU", { weekday: "long" });
 
     if (window.location.protocol === "file:") {
       selectors.fileWarning.hidden = false;
@@ -623,6 +703,15 @@
     function dateFromKey(value) {
       const [year, month, day] = value.split("-").map(Number);
       return new Date(year, month - 1, day);
+    }
+
+    function formatWeekday(value) {
+      if (!value) {
+        return "";
+      }
+
+      const weekday = WEEKDAY_FORMATTER.format(dateFromKey(value));
+      return weekday.charAt(0).toUpperCase() + weekday.slice(1);
     }
 
     function monthKey(date) {
@@ -683,8 +772,9 @@
 
     function setSelectedDate(value) {
       selectedEventDate = value;
-      selectors.eventDate.textContent = value;
-      calendarViewDate = dateFromKey(value);
+      selectors.eventDateValue.textContent = value;
+      selectors.weekdayBadge.textContent = formatWeekday(value);
+      calendarViewDate = value ? dateFromKey(value) : null;
     }
 
     function openCalendar() {

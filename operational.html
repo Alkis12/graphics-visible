@@ -137,29 +137,23 @@
       </div>
       <div class="actions">
         <button class="button" type="button" id="refreshButton">Обновить</button>
-        <a class="button" href="https://datalens.yandex/i0yioelotv302?event_id_internal_9r0j=&ticket_category_tdzf=" target="_blank" rel="noopener">Открыть в DataLens</a>
+        <a class="button" href="https://datalens.yandex/i0yioelotv302?_no_controls=1" target="_blank" rel="noopener">Открыть в DataLens</a>
       </div>
     </header>
 
     <section class="frame-wrap" aria-label="Оперативный дашборд">
-      <iframe id="dashboardFrame" title="Оперативный дашборд для ежедневного контроля" allowfullscreen></iframe>
+      <iframe id="dashboardFrame" title="Оперативный дашборд для ежедневного контроля" frameborder="0" allowfullscreen></iframe>
     </section>
   </main>
 
   <script>
-    const BASE_DASHBOARD_URL = "https://datalens.yandex/i0yioelotv302";
+    const DASHBOARD_URL = "https://datalens.yandex/i0yioelotv302?_no_controls=1";
     const frame = document.getElementById("dashboardFrame");
     const status = document.getElementById("status");
     const refreshButton = document.getElementById("refreshButton");
 
     function buildDashboardUrl() {
-      const url = new URL(BASE_DASHBOARD_URL);
-      url.searchParams.set("event_id_internal_9r0j", "");
-      url.searchParams.set("ticket_category_tdzf", "");
-      url.searchParams.set("_embedded", "1");
-      url.searchParams.set("_no_controls", "1");
-      url.searchParams.set("_theme", "dark");
-      return url.toString();
+      return DASHBOARD_URL;
     }
 
     function formatTime(date) {
