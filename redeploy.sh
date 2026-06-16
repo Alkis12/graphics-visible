@@ -50,10 +50,12 @@ if [[ ! -f .env ]]; then
   chmod 600 .env
 fi
 
-EXISTING_APP_PROJECT="$(docker inspect -f '{{ index .Config.Labels "com.docker.compose.project" }}' graphics_visible 2>/dev/null || true)"
-if [[ -n "$EXISTING_APP_PROJECT" && "$EXISTING_APP_PROJECT" != "graphics-visible" ]]; then
-  echo "Removing legacy graphics_visible container..."
-  docker rm -f graphics_visible >/dev/null
+if docker ps -a --format '{{.Names}}' | grep -Fxq "graphics_visible"; then
+  EXISTING_APP_PROJECT="$(docker inspect -f '{{ index .Config.Labels "com.docker.compose.project" }}' graphics_visible 2>/dev/null || true)"
+  if [[ "$EXISTING_APP_PROJECT" != "graphics-visible" ]]; then
+    echo "Removing legacy graphics_visible container..."
+    docker rm -f graphics_visible >/dev/null
+  fi
 fi
 
 echo "Building and restarting containers..."
