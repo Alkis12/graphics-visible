@@ -4,7 +4,8 @@ services:
     container_name: graphics_visible
     restart: unless-stopped
     depends_on:
-      - mongo
+      mongo:
+        condition: service_healthy
     environment:
       NODE_ENV: production
       PORT: 80
@@ -31,6 +32,12 @@ services:
       MONGO_INITDB_ROOT_PASSWORD: ${MONGO_ROOT_PASSWORD:-}
     volumes:
       - graphics_visible_mongo:/data/db
+    healthcheck:
+      test: ["CMD-SHELL", "mongosh --quiet -u \"$${MONGO_INITDB_ROOT_USERNAME}\" -p \"$${MONGO_INITDB_ROOT_PASSWORD}\" --authenticationDatabase admin --eval \"db.adminCommand({ ping: 1 }).ok\" | grep 1"]
+      interval: 5s
+      timeout: 5s
+      retries: 24
+      start_period: 10s
     networks:
       - graphics_visible
 
