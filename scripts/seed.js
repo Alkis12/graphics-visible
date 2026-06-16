@@ -1,5 +1,6 @@
 import { ObjectId } from "mongodb";
 import { DEFAULT_CLIENT, DEFAULT_DASHBOARDS } from "../src/defaultDashboards.js";
+import { config } from "../src/config.js";
 import { ensureIndexes, getDb } from "../src/db.js";
 import { generatePassword, hashPassword, normalizeUsername } from "../src/security.js";
 
@@ -115,11 +116,47 @@ async function upsertOdeon(db) {
   return { login: username, password: password || "(оставлен текущий пароль)" };
 }
 
+async function upsertPublicMongoUser(db) {
+  const username = env("PUBLIC_MONGO_USERNAME", "");
+  const password = env("PUBLIC_MONGO_PASSWORD", "");
+
+  if (!username || !password) {
+    return null;
+  }
+
+  const user = {
+    pwd: password,
+    roles: [{ role: "readWrite", db: config.mongoDb }],
+  };
+
+  try {
+    await db.command({
+      updateUser: username,
+      ...user,
+    });
+  } catch (error) {
+    if (error.codeName !== "UserNotFound" && error.code !== 11) {
+      throw error;
+    }
+
+    await db.command({
+      createUser: username,
+      ...user,
+    });
+  }
+
+  return {
+    username,
+    authSource: config.mongoDb,
+  };
+}
+
 const db = await getDb();
 await ensureIndexes(db);
 
 const admin = await upsertAdmin(db);
 const odeon = await upsertOdeon(db);
+const publicMongo = await upsertPublicMongoUser(db);
 
 console.log("Seed completed.");
 console.log(
@@ -129,6 +166,7 @@ console.log(
       odeon,
       client: DEFAULT_CLIENT,
       dashboards: DEFAULT_DASHBOARDS.length,
+      publicMongo,
     },
     null,
     2,

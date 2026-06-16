@@ -18,6 +18,8 @@ services:
       ADMIN_PASSWORD: ${ADMIN_PASSWORD:-}
       ODEON_USERNAME: ${ODEON_USERNAME:-odeon_show}
       ODEON_PASSWORD: ${ODEON_PASSWORD:-}
+      PUBLIC_MONGO_USERNAME: ${PUBLIC_MONGO_USERNAME:-dashboards_user}
+      PUBLIC_MONGO_PASSWORD: ${PUBLIC_MONGO_PASSWORD:-}
     ports:
       - "${APP_HOST:-127.0.0.1}:${APP_PORT:-8080}:80"
     networks:

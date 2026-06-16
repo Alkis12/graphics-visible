@@ -35,6 +35,15 @@ generate_secret() {
   od -An -N32 -tx1 /dev/urandom | tr -d ' \n'
 }
 
+ensure_env_var() {
+  local key="$1"
+  local value="$2"
+
+  if ! grep -q "^${key}=" .env 2>/dev/null; then
+    echo "${key}=${value}" >> .env
+  fi
+}
+
 if [[ ! -f .env ]]; then
   echo "Creating .env with generated production secrets..."
   {
@@ -43,12 +52,21 @@ if [[ ! -f .env ]]; then
     echo "MONGO_DB=planetra_dashboards"
     echo "MONGO_ROOT_USER=dashboards_admin"
     echo "MONGO_ROOT_PASSWORD=$(generate_secret)"
+    echo "MONGO_HOST=0.0.0.0"
+    echo "MONGO_PORT=27018"
     echo "SESSION_SECRET=$(generate_secret)"
     echo "TRUST_PROXY=true"
     echo "COOKIE_SECURE=true"
+    echo "PUBLIC_MONGO_USERNAME=dashboards_user"
+    echo "PUBLIC_MONGO_PASSWORD=$(generate_secret)"
   } > .env
   chmod 600 .env
 fi
+
+ensure_env_var "MONGO_HOST" "0.0.0.0"
+ensure_env_var "MONGO_PORT" "27018"
+ensure_env_var "PUBLIC_MONGO_USERNAME" "dashboards_user"
+ensure_env_var "PUBLIC_MONGO_PASSWORD" "$(generate_secret)"
 
 if docker ps -a --format '{{.Names}}' | grep -Fxq "graphics_visible"; then
   EXISTING_APP_PROJECT="$(docker inspect -f '{{ index .Config.Labels "com.docker.compose.project" }}' graphics_visible 2>/dev/null || true)"
@@ -75,3 +93,8 @@ docker ps --filter "name=graphics_visible" --format "table {{.Names}}\t{{.Image}
 
 echo "Seeding default users and Odeon dashboards..."
 docker compose exec -T app npm run seed
+
+set -a
+source .env
+set +a
+
