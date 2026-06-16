@@ -1,0 +1,517 @@
+const app = document.getElementById("app");
+
+const state = {
+  user: null,
+  clientData: null,
+  adminState: null,
+  activeDashboardId: null,
+  activeAdminTab: "clients",
+  notice: null,
+};
+
+const PASSWORD_ALPHABET = "ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz23456789!@#$%";
+
+function escapeHtml(value) {
+  return String(value ?? "")
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replaceAll('"', "&quot;")
+    .replaceAll("'", "&#039;");
+}
+
+function checked(value) {
+  return value ? "checked" : "";
+}
+
+async function api(path, options = {}) {
+  const response = await fetch(path, {
+    headers: {
+      "Content-Type": "application/json",
+      ...(options.headers || {}),
+    },
+    credentials: "same-origin",
+    ...options,
+  });
+
+  const payload = await response.json().catch(() => ({}));
+  if (!response.ok) {
+    throw new Error(payload.error || "Ошибка запроса");
+  }
+
+  return payload;
+}
+
+function setNotice(message, type = "success") {
+  state.notice = message ? { message, type } : null;
+}
+
+function noticeHtml() {
+  if (!state.notice) {
+    return '<div class="notice"></div>';
+  }
+
+  const className = state.notice.type === "error" ? "notice-error" : "notice-success";
+  return `<div class="notice ${className}">${escapeHtml(state.notice.message)}</div>`;
+}
+
+function formValues(form) {
+  return Object.fromEntries(new FormData(form).entries());
+}
+
+function generatePassword(length = 18) {
+  const values = new Uint32Array(length);
+  crypto.getRandomValues(values);
+  return Array.from(values, (value) => PASSWORD_ALPHABET[value % PASSWORD_ALPHABET.length]).join("");
+}
+
+async function loadClientData() {
+  state.clientData = await api("/api/dashboards");
+  const dashboards = state.clientData.dashboards || [];
+  if (!dashboards.some((dashboard) => dashboard.id === state.activeDashboardId)) {
+    state.activeDashboardId = dashboards[0]?.id || null;
+  }
+}
+
+async function loadAdminState() {
+  state.adminState = await api("/api/admin/state");
+}
+
+async function boot() {
+  try {
+    const payload = await api("/api/me");
+    state.user = payload.user;
+    if (state.user?.role === "admin") {
+      await loadAdminState();
+    } else if (state.user?.role === "client") {
+      await loadClientData();
+    }
+  } catch {
+    state.user = null;
+  }
+
+  render();
+}
+
+function render() {
+  if (!state.user) {
+    renderLogin();
+    return;
+  }
+
+  if (state.user.role === "admin") {
+    renderAdmin();
+    return;
+  }
+
+  renderClient();
+}
+
+function renderLogin() {
+  app.innerHTML = `
+    <section class="login-view">
+      <form class="login-panel" data-action="login">
+        <div class="login-title">
+          <div class="brand-word">Odeon</div>
+          <h1>Dashboards</h1>
+        </div>
+        <div class="form">
+          <div class="field">
+            <label for="login-username">Логин</label>
+            <input id="login-username" name="username" autocomplete="username" autocapitalize="none" required>
+          </div>
+          <div class="field">
+            <label for="login-password">Пароль</label>
+            <input id="login-password" name="password" type="password" autocomplete="current-password" required>
+          </div>
+          ${noticeHtml()}
+          <button class="button button-primary" type="submit">Войти</button>
+        </div>
+      </form>
+    </section>
+  `;
+}
+
+function renderClient() {
+  const dashboards = state.clientData?.dashboards || [];
+  const activeDashboard = dashboards.find((dashboard) => dashboard.id === state.activeDashboardId) || dashboards[0];
+  const clientName = state.clientData?.client?.name || state.user.clientName || "Client";
+
+  app.innerHTML = `
+    <section class="client-shell">
+      <header class="topbar">
+        <div class="topbar-title">
+          <div class="brand-word">Odeon</div>
+          <h1>${escapeHtml(clientName)}</h1>
+          <div class="topbar-meta">${escapeHtml(state.user.username)}</div>
+        </div>
+        <div class="topbar-actions">
+          ${
+            activeDashboard
+              ? `<a class="link-button" href="${escapeHtml(activeDashboard.url)}" target="_blank" rel="noopener">Открыть</a>`
+              : ""
+          }
+          <button class="button" type="button" data-action="logout">Выйти</button>
+        </div>
+      </header>
+      <div class="dashboard-workspace">
+        ${
+          dashboards.length
+            ? `<nav class="tabs" aria-label="Дашборды">
+                ${dashboards
+                  .map(
+                    (dashboard) => `
+                      <button class="tab ${dashboard.id === activeDashboard.id ? "is-active" : ""}" type="button" data-action="select-dashboard" data-dashboard-id="${escapeHtml(dashboard.id)}">
+                        ${escapeHtml(dashboard.title)}
+                      </button>
+                    `,
+                  )
+                  .join("")}
+              </nav>
+              <section class="dashboard-frame-wrap">
+                <iframe class="dashboard-frame" title="${escapeHtml(activeDashboard.title)}" src="${escapeHtml(activeDashboard.url)}" allowfullscreen></iframe>
+              </section>`
+            : '<section class="empty-state">Дашборды не настроены</section>'
+        }
+      </div>
+    </section>
+  `;
+}
+
+function renderAdmin() {
+  app.innerHTML = `
+    <section class="admin-shell">
+      <header class="topbar">
+        <div class="topbar-title">
+          <div class="brand-word">Odeon</div>
+          <h1>Админ-панель</h1>
+          <div class="topbar-meta">${escapeHtml(state.user.username)}</div>
+        </div>
+        <div class="topbar-actions">
+          <button class="button" type="button" data-action="refresh-admin">Обновить</button>
+          <button class="button" type="button" data-action="logout">Выйти</button>
+        </div>
+      </header>
+      <section class="admin-workspace">
+        <nav class="admin-nav" aria-label="Разделы админ-панели">
+          <button class="tab ${state.activeAdminTab === "clients" ? "is-active" : ""}" type="button" data-action="admin-tab" data-tab="clients">Клиенты</button>
+          <button class="tab ${state.activeAdminTab === "dashboards" ? "is-active" : ""}" type="button" data-action="admin-tab" data-tab="dashboards">Дашборды</button>
+        </nav>
+        ${noticeHtml()}
+        ${state.activeAdminTab === "clients" ? renderClientsAdmin() : renderDashboardsAdmin()}
+      </section>
+    </section>
+  `;
+}
+
+function renderClientsAdmin() {
+  const clients = state.adminState?.clients || [];
+
+  return `
+    <section class="panel">
+      <div class="panel-head">
+        <h2>Клиенты</h2>
+      </div>
+      <form class="form-grid" data-action="create-client">
+        <div class="field">
+          <label>Название</label>
+          <input name="name" value="Odeon Show" required>
+        </div>
+        <div class="field">
+          <label>Slug</label>
+          <input name="slug" value="odeon-show" autocapitalize="none" required>
+        </div>
+        <div class="field">
+          <label>Логин</label>
+          <input name="username" autocapitalize="none" required>
+        </div>
+        <div class="field">
+          <label>Пароль</label>
+          <div class="password-line">
+            <input id="new-client-password" name="password" autocomplete="new-password" required>
+            <button class="button button-small" type="button" data-action="generate-password" data-target="new-client-password">Сгенерировать</button>
+          </div>
+        </div>
+        <div class="field field-wide">
+          <button class="button button-primary" type="submit">Создать клиента</button>
+        </div>
+      </form>
+    </section>
+    <section class="panel">
+      <div class="list">
+        ${
+          clients.length
+            ? clients.map(renderClientRow).join("")
+            : '<div class="empty-state">Клиентов пока нет</div>'
+        }
+      </div>
+    </section>
+  `;
+}
+
+function renderClientRow(client) {
+  return `
+    <form class="row-form row-grid client-row-grid" data-action="save-client" data-client-id="${escapeHtml(client.id)}">
+      <div class="field">
+        <label>Название</label>
+        <input name="name" value="${escapeHtml(client.name)}" required>
+      </div>
+      <div class="field">
+        <label>Slug</label>
+        <input name="slug" value="${escapeHtml(client.slug)}" autocapitalize="none" required>
+      </div>
+      <div class="field">
+        <label>Логин</label>
+        <input name="username" value="${escapeHtml(client.user?.username || "")}" autocapitalize="none" required>
+      </div>
+      <div class="field">
+        <label>Новый пароль</label>
+        <input name="password" autocomplete="new-password" placeholder="Без изменений">
+      </div>
+      <label class="checkbox-field">
+        <input name="isActive" type="checkbox" ${checked(client.isActive && client.user?.isActive !== false)}>
+        Активен
+      </label>
+      <div class="row-actions">
+        <button class="button button-small" type="submit">Сохранить</button>
+        <button class="button button-small button-danger" type="button" data-action="delete-client" data-client-id="${escapeHtml(client.id)}">Удалить</button>
+      </div>
+    </form>
+  `;
+}
+
+function renderDashboardsAdmin() {
+  const clients = state.adminState?.clients || [];
+  const dashboards = state.adminState?.dashboards || [];
+
+  return `
+    <section class="panel">
+      <div class="panel-head">
+        <h2>Дашборды</h2>
+      </div>
+      <form class="form-grid" data-action="create-dashboard">
+        <div class="field">
+          <label>Клиент</label>
+          <select name="clientId" required>
+            ${clients.map((client) => `<option value="${escapeHtml(client.id)}">${escapeHtml(client.name)}</option>`).join("")}
+          </select>
+        </div>
+        <div class="field">
+          <label>Название</label>
+          <input name="title" required>
+        </div>
+        <div class="field field-wide">
+          <label>Ссылка</label>
+          <input name="url" required>
+        </div>
+        <div class="field">
+          <label>Описание</label>
+          <input name="description">
+        </div>
+        <div class="field">
+          <label>Порядок</label>
+          <input name="sortOrder" type="number" value="100" inputmode="numeric">
+        </div>
+        <label class="checkbox-field">
+          <input name="isActive" type="checkbox" checked>
+          Активен
+        </label>
+        <div class="field">
+          <button class="button button-primary" type="submit">Добавить</button>
+        </div>
+      </form>
+    </section>
+    <section class="panel">
+      <div class="list">
+        ${
+          dashboards.length
+            ? dashboards.map((dashboard) => renderDashboardRow(dashboard, clients)).join("")
+            : '<div class="empty-state">Дашбордов пока нет</div>'
+        }
+      </div>
+    </section>
+  `;
+}
+
+function renderDashboardRow(dashboard, clients) {
+  return `
+    <form class="dashboard-row row-grid dashboard-row-grid" data-action="save-dashboard" data-dashboard-id="${escapeHtml(dashboard.id)}">
+      <div class="field">
+        <label>Клиент</label>
+        <select name="clientId" required>
+          ${clients
+            .map(
+              (client) =>
+                `<option value="${escapeHtml(client.id)}" ${client.id === dashboard.clientId ? "selected" : ""}>${escapeHtml(client.name)}</option>`,
+            )
+            .join("")}
+        </select>
+      </div>
+      <div class="field">
+        <label>Название</label>
+        <input name="title" value="${escapeHtml(dashboard.title)}" required>
+      </div>
+      <div class="field">
+        <label>Ссылка</label>
+        <input name="url" value="${escapeHtml(dashboard.url)}" required>
+      </div>
+      <div class="field">
+        <label>Порядок</label>
+        <input name="sortOrder" type="number" value="${escapeHtml(dashboard.sortOrder)}" inputmode="numeric">
+      </div>
+      <label class="checkbox-field">
+        <input name="isActive" type="checkbox" ${checked(dashboard.isActive)}>
+        Активен
+      </label>
+      <div class="row-actions">
+        <button class="button button-small" type="submit">Сохранить</button>
+        <button class="button button-small button-danger" type="button" data-action="delete-dashboard" data-dashboard-id="${escapeHtml(dashboard.id)}">Удалить</button>
+      </div>
+    </form>
+  `;
+}
+
+document.addEventListener("submit", async (event) => {
+  const form = event.target.closest("form[data-action]");
+  if (!form) {
+    return;
+  }
+
+  event.preventDefault();
+  const action = form.dataset.action;
+
+  try {
+    if (action === "login") {
+      const payload = await api("/api/auth/login", {
+        method: "POST",
+        body: JSON.stringify(formValues(form)),
+      });
+      state.user = payload.user;
+      setNotice(null);
+      if (state.user.role === "admin") {
+        await loadAdminState();
+      } else {
+        await loadClientData();
+      }
+      render();
+    }
+
+    if (action === "create-client") {
+      const values = formValues(form);
+      state.adminState = await api("/api/admin/clients", {
+        method: "POST",
+        body: JSON.stringify(values),
+      });
+      setNotice("Клиент создан");
+      render();
+    }
+
+    if (action === "save-client") {
+      const values = formValues(form);
+      if (!values.password) {
+        delete values.password;
+      }
+      values.isActive = form.elements.isActive.checked;
+      state.adminState = await api(`/api/admin/clients/${form.dataset.clientId}`, {
+        method: "PATCH",
+        body: JSON.stringify(values),
+      });
+      setNotice("Клиент сохранен");
+      render();
+    }
+
+    if (action === "create-dashboard") {
+      const values = formValues(form);
+      values.isActive = form.elements.isActive.checked;
+      state.adminState = await api("/api/admin/dashboards", {
+        method: "POST",
+        body: JSON.stringify(values),
+      });
+      setNotice("Дашборд добавлен");
+      render();
+    }
+
+    if (action === "save-dashboard") {
+      const values = formValues(form);
+      values.isActive = form.elements.isActive.checked;
+      state.adminState = await api(`/api/admin/dashboards/${form.dataset.dashboardId}`, {
+        method: "PATCH",
+        body: JSON.stringify(values),
+      });
+      setNotice("Дашборд сохранен");
+      render();
+    }
+  } catch (error) {
+    setNotice(error.message, "error");
+    render();
+  }
+});
+
+document.addEventListener("click", async (event) => {
+  const button = event.target.closest("[data-action]");
+  if (!button) {
+    return;
+  }
+
+  const action = button.dataset.action;
+
+  try {
+    if (action === "logout") {
+      await api("/api/auth/logout", { method: "POST" });
+      state.user = null;
+      state.clientData = null;
+      state.adminState = null;
+      state.activeDashboardId = null;
+      setNotice(null);
+      render();
+    }
+
+    if (action === "select-dashboard") {
+      state.activeDashboardId = button.dataset.dashboardId;
+      render();
+    }
+
+    if (action === "admin-tab") {
+      state.activeAdminTab = button.dataset.tab;
+      setNotice(null);
+      render();
+    }
+
+    if (action === "refresh-admin") {
+      await loadAdminState();
+      setNotice("Данные обновлены");
+      render();
+    }
+
+    if (action === "generate-password") {
+      const input = document.getElementById(button.dataset.target);
+      if (input) {
+        input.value = generatePassword();
+        input.focus();
+      }
+    }
+
+    if (action === "delete-client") {
+      if (!confirm("Удалить клиента, его доступ и дашборды?")) {
+        return;
+      }
+      state.adminState = await api(`/api/admin/clients/${button.dataset.clientId}`, { method: "DELETE" });
+      setNotice("Клиент удален");
+      render();
+    }
+
+    if (action === "delete-dashboard") {
+      if (!confirm("Удалить дашборд?")) {
+        return;
+      }
+      state.adminState = await api(`/api/admin/dashboards/${button.dataset.dashboardId}`, { method: "DELETE" });
+      setNotice("Дашборд удален");
+      render();
+    }
+  } catch (error) {
+    setNotice(error.message, "error");
+    render();
+  }
+});
+
+boot();

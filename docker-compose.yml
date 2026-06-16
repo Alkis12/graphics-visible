@@ -1,0 +1,42 @@
+services:
+  app:
+    build: .
+    container_name: graphics_visible
+    restart: unless-stopped
+    depends_on:
+      - mongo
+    environment:
+      NODE_ENV: production
+      PORT: 80
+      TRUST_PROXY: ${TRUST_PROXY:-false}
+      COOKIE_SECURE: ${COOKIE_SECURE:-false}
+      SESSION_SECRET: ${SESSION_SECRET:-}
+      MONGO_DB: ${MONGO_DB:-planetra_dashboards}
+      MONGO_URL: mongodb://${MONGO_ROOT_USER:-dashboards_admin}:${MONGO_ROOT_PASSWORD:-}@mongo:27017/${MONGO_DB:-planetra_dashboards}?authSource=admin
+      ADMIN_USERNAME: ${ADMIN_USERNAME:-admin}
+      ADMIN_PASSWORD: ${ADMIN_PASSWORD:-}
+      ODEON_USERNAME: ${ODEON_USERNAME:-odeon_show}
+      ODEON_PASSWORD: ${ODEON_PASSWORD:-}
+    ports:
+      - "${APP_HOST:-127.0.0.1}:${APP_PORT:-8080}:80"
+    networks:
+      - graphics_visible
+
+  mongo:
+    image: mongo:7
+    container_name: graphics_visible_mongo
+    restart: unless-stopped
+    environment:
+      MONGO_INITDB_ROOT_USERNAME: ${MONGO_ROOT_USER:-dashboards_admin}
+      MONGO_INITDB_ROOT_PASSWORD: ${MONGO_ROOT_PASSWORD:-}
+    volumes:
+      - graphics_visible_mongo:/data/db
+    networks:
+      - graphics_visible
+
+volumes:
+  graphics_visible_mongo:
+
+networks:
+  graphics_visible:
+    name: graphics_visible_network
