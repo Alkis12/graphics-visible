@@ -16,7 +16,7 @@ services:
       MONGO_URL: ${MONGO_URL:-mongodb://${MONGO_ROOT_USER:-dashboards_admin}:${MONGO_ROOT_PASSWORD:-}@mongo:27017/${MONGO_DB:-planetra_dashboards}?authSource=admin}
       ADMIN_USERNAME: ${ADMIN_USERNAME:-admin}
       ADMIN_PASSWORD: ${ADMIN_PASSWORD:-}
-      ODEON_USERNAME: ${ODEON_USERNAME:-odeon_show}
+      ODEON_USERNAME: ${ODEON_USERNAME:-odeon_manager}
       ODEON_PASSWORD: ${ODEON_PASSWORD:-}
       PUBLIC_MONGO_USERNAME: ${PUBLIC_MONGO_USERNAME:-dashboards_user}
       PUBLIC_MONGO_PASSWORD: ${PUBLIC_MONGO_PASSWORD:-}

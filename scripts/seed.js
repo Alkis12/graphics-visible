@@ -61,7 +61,7 @@ async function upsertOdeon(db) {
   );
 
   const clientId = client.value?._id || client._id || new ObjectId(client.lastErrorObject?.upserted);
-  const username = normalizeUsername(env("ODEON_USERNAME", "odeon_show"));
+  const username = normalizeUsername(env("ODEON_USERNAME", "odeon_manager"));
   const existing = await db.collection("users").findOne({ role: "client", clientId });
   const password = env("ODEON_PASSWORD", existing && !RESET_PASSWORDS ? null : generatePassword());
 
