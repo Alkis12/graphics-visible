@@ -97,21 +97,34 @@ async function upsertOdeon(db) {
         $set: {
           clientId,
           key: dashboard.key,
+        },
+        $setOnInsert: {
           title: dashboard.title,
           description: dashboard.description,
           url: dashboard.url,
-          kind: dashboard.kind || "embed",
+          filtersEnabled: dashboard.filtersEnabled === true,
           sortOrder: dashboard.sortOrder,
           isActive: true,
-          updatedAt: now,
-        },
-        $setOnInsert: {
           createdAt: now,
+          updatedAt: now,
         },
       },
       { upsert: true },
     );
+
+    await db.collection("dashboards").updateOne(
+      { clientId, key: dashboard.key, filtersEnabled: { $exists: false } },
+      { $set: { filtersEnabled: dashboard.filtersEnabled === true, updatedAt: now } },
+    );
   }
+
+  await db.collection("dashboards").deleteMany({
+    clientId,
+    key: {
+      $exists: true,
+      $nin: DEFAULT_DASHBOARDS.map((dashboard) => dashboard.key),
+    },
+  });
 
   return { login: username, password: password || "(оставлен текущий пароль)" };
 }

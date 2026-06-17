@@ -106,7 +106,7 @@ function serializeDashboard(dashboard) {
     title: dashboard.title,
     description: dashboard.description || "",
     url: dashboard.url,
-    kind: dashboard.kind || "embed",
+    filtersEnabled: dashboard.filtersEnabled === true,
     sortOrder: dashboard.sortOrder || 0,
     isActive: dashboard.isActive !== false,
     createdAt: dashboard.createdAt,
@@ -143,11 +143,13 @@ async function buildAdminState(db) {
   };
 }
 
-function validateUrl(value) {
-  const url = cleanString(value);
+function normalizeDashboardUrl(value) {
+  let url = cleanString(value);
 
-  if (url.startsWith("/") && !url.startsWith("//")) {
-    return url;
+  if (/^[a-z0-9]{8,}$/i.test(url)) {
+    url = `https://datalens.yandex/${url}`;
+  } else if (/^datalens\.yandex\//i.test(url)) {
+    url = `https://${url}`;
   }
 
   try {
@@ -254,31 +256,6 @@ app.get(
   asyncHandler(async (_req, res) => {
     const db = await getDb();
     res.json(await buildAdminState(db));
-  }),
-);
-
-app.get(
-  "/internal/clients/:slug/filters",
-  asyncHandler(async (req, res) => {
-    if (!req.session.user) {
-      res.redirect("/");
-      return;
-    }
-
-    const db = await getDb();
-    const client = await db.collection("clients").findOne({ slug: req.params.slug });
-
-    if (!client) {
-      res.status(404).send("Not found");
-      return;
-    }
-
-    if (req.session.user.role !== "admin" && String(client._id) !== req.session.user.clientId) {
-      res.status(403).send("Forbidden");
-      return;
-    }
-
-    res.sendFile(path.resolve(__dirname, "..", "index.html"));
   }),
 );
 
@@ -435,7 +412,7 @@ app.post(
     const now = new Date();
     const clientId = objectIdFromParam(req.body.clientId);
     const title = cleanString(req.body.title);
-    const url = validateUrl(req.body.url);
+    const url = normalizeDashboardUrl(req.body.url);
 
     if (!title) {
       res.status(400).json({ error: "Название дашборда не может быть пустым" });
@@ -451,10 +428,10 @@ app.post(
     await db.collection("dashboards").insertOne({
       clientId,
       title,
-        description: cleanString(req.body.description),
-        url,
-        kind: "embed",
-        sortOrder: Number.parseInt(req.body.sortOrder || "0", 10) || 0,
+      description: cleanString(req.body.description),
+      url,
+      filtersEnabled: toBoolean(req.body.filtersEnabled, false),
+      sortOrder: Number.parseInt(req.body.sortOrder || "0", 10) || 0,
       isActive: toBoolean(req.body.isActive, true),
       createdAt: now,
       updatedAt: now,
@@ -490,7 +467,11 @@ app.patch(
     }
 
     if (req.body.url !== undefined) {
-      patch.url = validateUrl(req.body.url);
+      patch.url = normalizeDashboardUrl(req.body.url);
+    }
+
+    if (req.body.filtersEnabled !== undefined) {
+      patch.filtersEnabled = toBoolean(req.body.filtersEnabled, false);
     }
 
     if (req.body.sortOrder !== undefined) {

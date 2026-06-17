@@ -6,7 +6,6 @@ COPY package*.json ./
 RUN npm ci --omit=dev
 
 COPY public ./public
-COPY index.html operational.html ./
 COPY scripts ./scripts
 COPY src ./src
 

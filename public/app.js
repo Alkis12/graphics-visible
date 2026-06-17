@@ -6,10 +6,46 @@ const state = {
   adminState: null,
   activeDashboardId: null,
   activeAdminTab: "clients",
+  filters: {
+    category: "",
+    eventValue: "",
+  },
   notice: null,
 };
 
 const PASSWORD_ALPHABET = "ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz23456789!@#$%";
+const FILTER_PARAMS = {
+  category: "ticket_category_tdzf",
+  event: "event_id_internal_9r0j",
+};
+const FILTER_CATEGORIES = [
+  "",
+  "VIP",
+  "Балкон Общая",
+  "Партер 1 Фланг",
+  "Партер 1 Центр",
+  "Партер 2 Общая",
+  "Партер 3 Общая",
+];
+const FILTER_EVENTS = buildEventOptions("2026-05-28", "2026-07-31");
+
+function buildEventOptions(startDate, endDate) {
+  const options = [];
+  const cursor = dateFromKey(startDate);
+  const end = dateFromKey(endDate);
+
+  while (cursor <= end) {
+    const day = cursor.getDay();
+    if (day !== 1) {
+      const date = dateKey(cursor);
+      const time = day === 0 ? "18:00:00" : "20:00:00";
+      options.push(`${date} ${time}`);
+    }
+    cursor.setDate(cursor.getDate() + 1);
+  }
+
+  return options;
+}
 
 function escapeHtml(value) {
   return String(value ?? "")
@@ -22,6 +58,59 @@ function escapeHtml(value) {
 
 function checked(value) {
   return value ? "checked" : "";
+}
+
+function dateFromKey(value) {
+  const [year, month, day] = value.split("-").map(Number);
+  return new Date(year, month - 1, day);
+}
+
+function dateKey(date) {
+  return [
+    date.getFullYear(),
+    String(date.getMonth() + 1).padStart(2, "0"),
+    String(date.getDate()).padStart(2, "0"),
+  ].join("-");
+}
+
+function formatEventLabel(value) {
+  const date = value.slice(0, 10);
+  const weekday = new Intl.DateTimeFormat("ru-RU", { weekday: "short" }).format(dateFromKey(date));
+  return `${date} ${weekday}`;
+}
+
+function ensureDefaultFilters() {
+  if (state.filters.eventValue) {
+    return;
+  }
+
+  const today = dateKey(new Date());
+  const todayEvent = FILTER_EVENTS.find((eventValue) => eventValue.startsWith(today));
+  const nextEvent = FILTER_EVENTS.find((eventValue) => eventValue.slice(0, 10) >= today);
+  state.filters.eventValue = todayEvent || nextEvent || FILTER_EVENTS[0] || "";
+}
+
+function buildDashboardUrl(dashboard) {
+  if (!dashboard?.url) {
+    return "";
+  }
+
+  try {
+    const url = new URL(dashboard.url, window.location.origin);
+    url.searchParams.set("_embedded", "1");
+    url.searchParams.set("_no_controls", "1");
+    url.searchParams.set("_theme", "dark");
+
+    if (dashboard.filtersEnabled) {
+      ensureDefaultFilters();
+      url.searchParams.set(FILTER_PARAMS.event, state.filters.eventValue);
+      url.searchParams.set(FILTER_PARAMS.category, state.filters.category);
+    }
+
+    return url.toString();
+  } catch {
+    return dashboard.url;
+  }
 }
 
 async function api(path, options = {}) {
@@ -136,6 +225,7 @@ function renderClient() {
   const dashboards = state.clientData?.dashboards || [];
   const activeDashboard = dashboards.find((dashboard) => dashboard.id === state.activeDashboardId) || dashboards[0];
   const clientName = state.clientData?.client?.name || state.user.clientName || "Client";
+  const activeDashboardUrl = buildDashboardUrl(activeDashboard);
 
   app.innerHTML = `
     <section class="client-shell">
@@ -148,13 +238,13 @@ function renderClient() {
         <div class="topbar-actions">
           ${
             activeDashboard
-              ? `<a class="link-button" href="${escapeHtml(activeDashboard.url)}" target="_blank" rel="noopener">Открыть</a>`
+              ? `<a class="link-button" href="${escapeHtml(activeDashboardUrl)}" target="_blank" rel="noopener">Открыть</a>`
               : ""
           }
           <button class="button" type="button" data-action="logout">Выйти</button>
         </div>
       </header>
-      <div class="dashboard-workspace">
+      <div class="dashboard-workspace ${activeDashboard?.filtersEnabled ? "has-filters" : ""}">
         ${
           dashboards.length
             ? `<nav class="tabs" aria-label="Дашборды">
@@ -168,11 +258,41 @@ function renderClient() {
                   )
                   .join("")}
               </nav>
+              ${renderClientFilters(activeDashboard)}
               <section class="dashboard-frame-wrap">
-                <iframe class="dashboard-frame" title="${escapeHtml(activeDashboard.title)}" src="${escapeHtml(activeDashboard.url)}" allowfullscreen></iframe>
+                <iframe class="dashboard-frame" title="${escapeHtml(activeDashboard.title)}" src="${escapeHtml(activeDashboardUrl)}" allowfullscreen></iframe>
               </section>`
             : '<section class="empty-state">Дашборды не настроены</section>'
         }
+      </div>
+    </section>
+  `;
+}
+
+function renderClientFilters(activeDashboard) {
+  if (!activeDashboard?.filtersEnabled) {
+    return "";
+  }
+
+  ensureDefaultFilters();
+
+  return `
+    <section class="client-filters" aria-label="Фильтры дашборда">
+      <div class="field">
+        <label for="client-event-filter">Дата события</label>
+        <select id="client-event-filter" data-action="filter-event">
+          ${FILTER_EVENTS.map(
+            (eventValue) => `<option value="${escapeHtml(eventValue)}" ${eventValue === state.filters.eventValue ? "selected" : ""}>${escapeHtml(formatEventLabel(eventValue))}</option>`,
+          ).join("")}
+        </select>
+      </div>
+      <div class="field">
+        <label for="client-category-filter">Категория билета</label>
+        <select id="client-category-filter" data-action="filter-category">
+          ${FILTER_CATEGORIES.map(
+            (category) => `<option value="${escapeHtml(category)}" ${category === state.filters.category ? "selected" : ""}>${escapeHtml(category || "Все")}</option>`,
+          ).join("")}
+        </select>
       </div>
     </section>
   `;
@@ -301,7 +421,7 @@ function renderDashboardsAdmin() {
           <input name="title" required>
         </div>
         <div class="field field-wide">
-          <label>Ссылка</label>
+          <label>Ссылка или код DataLens</label>
           <input name="url" required>
         </div>
         <div class="field">
@@ -315,6 +435,10 @@ function renderDashboardsAdmin() {
         <label class="checkbox-field">
           <input name="isActive" type="checkbox" checked>
           Активен
+        </label>
+        <label class="checkbox-field">
+          <input name="filtersEnabled" type="checkbox" checked>
+          Фильтры
         </label>
         <div class="field">
           <button class="button button-primary" type="submit">Добавить</button>
@@ -352,7 +476,7 @@ function renderDashboardRow(dashboard, clients) {
         <input name="title" value="${escapeHtml(dashboard.title)}" required>
       </div>
       <div class="field">
-        <label>Ссылка</label>
+        <label>Ссылка или код DataLens</label>
         <input name="url" value="${escapeHtml(dashboard.url)}" required>
       </div>
       <div class="field">
@@ -362,6 +486,10 @@ function renderDashboardRow(dashboard, clients) {
       <label class="checkbox-field">
         <input name="isActive" type="checkbox" ${checked(dashboard.isActive)}>
         Активен
+      </label>
+      <label class="checkbox-field">
+        <input name="filtersEnabled" type="checkbox" ${checked(dashboard.filtersEnabled)}>
+        Фильтры
       </label>
       <div class="row-actions">
         <button class="button button-small" type="submit">Сохранить</button>
@@ -423,6 +551,7 @@ document.addEventListener("submit", async (event) => {
     if (action === "create-dashboard") {
       const values = formValues(form);
       values.isActive = form.elements.isActive.checked;
+      values.filtersEnabled = form.elements.filtersEnabled.checked;
       state.adminState = await api("/api/admin/dashboards", {
         method: "POST",
         body: JSON.stringify(values),
@@ -434,6 +563,7 @@ document.addEventListener("submit", async (event) => {
     if (action === "save-dashboard") {
       const values = formValues(form);
       values.isActive = form.elements.isActive.checked;
+      values.filtersEnabled = form.elements.filtersEnabled.checked;
       state.adminState = await api(`/api/admin/dashboards/${form.dataset.dashboardId}`, {
         method: "PATCH",
         body: JSON.stringify(values),
@@ -443,6 +573,23 @@ document.addEventListener("submit", async (event) => {
     }
   } catch (error) {
     setNotice(error.message, "error");
+    render();
+  }
+});
+
+document.addEventListener("change", (event) => {
+  const control = event.target.closest("[data-action]");
+  if (!control) {
+    return;
+  }
+
+  if (control.dataset.action === "filter-event") {
+    state.filters.eventValue = control.value;
+    render();
+  }
+
+  if (control.dataset.action === "filter-category") {
+    state.filters.category = control.value;
     render();
   }
 });
