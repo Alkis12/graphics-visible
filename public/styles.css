@@ -234,6 +234,9 @@ a:focus-visible {
 
 .topbar {
   min-height: 68px;
+  position: sticky;
+  top: 0;
+  z-index: 20;
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto;
   gap: 16px;
@@ -268,6 +271,28 @@ a:focus-visible {
   flex-wrap: wrap;
   gap: 8px;
   justify-content: flex-end;
+}
+
+.client-topbar {
+  grid-template-columns: minmax(180px, 1fr) minmax(440px, 640px) minmax(120px, 1fr);
+  align-items: center;
+}
+
+.client-topbar .client-filters {
+  width: 100%;
+  padding: 0;
+  border-bottom: 0;
+  background: transparent;
+}
+
+.client-topbar .client-filters select {
+  min-height: 38px;
+}
+
+.client-topbar .topbar-actions {
+  display: grid;
+  gap: 4px;
+  justify-items: end;
 }
 
 .client-shell,
@@ -343,6 +368,11 @@ a:focus-visible {
   display: grid;
   gap: 22px;
   padding: 16px clamp(14px, 2.6vw, 30px) 30px;
+}
+
+.dashboard-row-divider {
+  height: 1px;
+  background: linear-gradient(90deg, transparent, var(--line-strong), transparent);
 }
 
 .dashboard-panel {
@@ -485,12 +515,32 @@ a:focus-visible {
     grid-template-columns: 1fr;
   }
 
+  .client-topbar {
+    grid-template-columns: 1fr;
+  }
+
   .row-actions {
     justify-content: stretch;
   }
 
   .row-actions .button {
     flex: 1;
+  }
+}
+
+@media (min-width: 1600px) {
+  .dashboard-stack {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    align-items: start;
+  }
+
+  .dashboard-row-divider {
+    grid-column: 1 / -1;
+  }
+
+  .dashboard-frame-wrap {
+    height: 68vh;
+    min-height: 540px;
   }
 }
 
@@ -506,6 +556,10 @@ a:focus-visible {
 
   .topbar-actions {
     justify-content: stretch;
+  }
+
+  .client-topbar .topbar-actions {
+    justify-items: stretch;
   }
 
   .topbar-actions .button,

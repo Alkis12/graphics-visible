@@ -75,7 +75,7 @@ function dateKey(date) {
 function formatEventLabel(value) {
   const date = value.slice(0, 10);
   const weekday = new Intl.DateTimeFormat("ru-RU", { weekday: "short" }).format(dateFromKey(date));
-  return `${date} ${weekday}`;
+  return `${date} (${weekday})`;
 }
 
 function ensureDefaultFilters() {
@@ -223,28 +223,34 @@ function renderClient() {
 
   app.innerHTML = `
     <section class="client-shell">
-      <header class="topbar">
+      <header class="topbar client-topbar">
         <div class="topbar-title">
           <div class="brand-word">Odeon</div>
           <h1>${escapeHtml(clientName)}</h1>
-          <div class="topbar-meta">${escapeHtml(state.user.username)}</div>
         </div>
+        ${hasFilters ? renderClientFilters() : '<div></div>'}
         <div class="topbar-actions">
           <button class="button" type="button" data-action="logout">Выйти</button>
+          <div class="topbar-meta">${escapeHtml(state.user.username)}</div>
         </div>
       </header>
       <div class="dashboard-workspace ${hasFilters ? "has-filters" : ""}">
         ${
           dashboards.length
-            ? `${hasFilters ? renderClientFilters() : ""}
-              <section class="dashboard-stack" aria-label="Дашборды">
-                ${dashboards.map(renderClientDashboard).join("")}
+            ? `<section class="dashboard-stack" aria-label="Дашборды">
+                ${renderClientDashboards(dashboards)}
               </section>`
             : '<section class="empty-state">Дашборды не настроены</section>'
         }
       </div>
     </section>
   `;
+}
+
+function renderClientDashboards(dashboards) {
+  return dashboards
+    .map((dashboard, index) => `${renderClientDashboard(dashboard)}${index === 1 ? '<div class="dashboard-row-divider"></div>' : ""}`)
+    .join("");
 }
 
 function renderClientFilters() {
@@ -290,6 +296,25 @@ function renderClientDashboard(dashboard) {
       </section>
     </section>
   `;
+}
+
+function shiftEventFilter(step) {
+  ensureDefaultFilters();
+
+  const currentIndex = FILTER_EVENTS.indexOf(state.filters.eventValue);
+  if (currentIndex < 0) {
+    state.filters.eventValue = FILTER_EVENTS[0] || "";
+    render();
+    return;
+  }
+
+  const nextIndex = Math.min(Math.max(currentIndex + step, 0), FILTER_EVENTS.length - 1);
+  if (nextIndex === currentIndex) {
+    return;
+  }
+
+  state.filters.eventValue = FILTER_EVENTS[nextIndex];
+  render();
 }
 
 function renderAdmin() {
@@ -586,6 +611,20 @@ document.addEventListener("change", (event) => {
     state.filters.category = control.value;
     render();
   }
+});
+
+document.addEventListener("keydown", (event) => {
+  if (state.user?.role !== "client" || !["ArrowLeft", "ArrowRight"].includes(event.key)) {
+    return;
+  }
+
+  const activeElement = document.activeElement;
+  if (activeElement && ["INPUT", "SELECT", "TEXTAREA"].includes(activeElement.tagName)) {
+    return;
+  }
+
+  event.preventDefault();
+  shiftEventFilter(event.key === "ArrowRight" ? 1 : -1);
 });
 
 document.addEventListener("click", async (event) => {
