@@ -4,7 +4,6 @@ const state = {
   user: null,
   clientData: null,
   adminState: null,
-  activeDashboardId: null,
   activeAdminTab: "clients",
   filters: {
     category: "",
@@ -156,10 +155,6 @@ function generatePassword(length = 18) {
 
 async function loadClientData() {
   state.clientData = await api("/api/dashboards");
-  const dashboards = state.clientData.dashboards || [];
-  if (!dashboards.some((dashboard) => dashboard.id === state.activeDashboardId)) {
-    state.activeDashboardId = dashboards[0]?.id || null;
-  }
 }
 
 async function loadAdminState() {
@@ -223,9 +218,8 @@ function renderLogin() {
 
 function renderClient() {
   const dashboards = state.clientData?.dashboards || [];
-  const activeDashboard = dashboards.find((dashboard) => dashboard.id === state.activeDashboardId) || dashboards[0];
   const clientName = state.clientData?.client?.name || state.user.clientName || "Client";
-  const activeDashboardUrl = buildDashboardUrl(activeDashboard);
+  const hasFilters = dashboards.some((dashboard) => dashboard.filtersEnabled);
 
   app.innerHTML = `
     <section class="client-shell">
@@ -236,31 +230,15 @@ function renderClient() {
           <div class="topbar-meta">${escapeHtml(state.user.username)}</div>
         </div>
         <div class="topbar-actions">
-          ${
-            activeDashboard
-              ? `<a class="link-button" href="${escapeHtml(activeDashboardUrl)}" target="_blank" rel="noopener">Открыть</a>`
-              : ""
-          }
           <button class="button" type="button" data-action="logout">Выйти</button>
         </div>
       </header>
-      <div class="dashboard-workspace ${activeDashboard?.filtersEnabled ? "has-filters" : ""}">
+      <div class="dashboard-workspace ${hasFilters ? "has-filters" : ""}">
         ${
           dashboards.length
-            ? `<nav class="tabs" aria-label="Дашборды">
-                ${dashboards
-                  .map(
-                    (dashboard) => `
-                      <button class="tab ${dashboard.id === activeDashboard.id ? "is-active" : ""}" type="button" data-action="select-dashboard" data-dashboard-id="${escapeHtml(dashboard.id)}">
-                        ${escapeHtml(dashboard.title)}
-                      </button>
-                    `,
-                  )
-                  .join("")}
-              </nav>
-              ${renderClientFilters(activeDashboard)}
-              <section class="dashboard-frame-wrap">
-                <iframe class="dashboard-frame" title="${escapeHtml(activeDashboard.title)}" src="${escapeHtml(activeDashboardUrl)}" allowfullscreen></iframe>
+            ? `${hasFilters ? renderClientFilters() : ""}
+              <section class="dashboard-stack" aria-label="Дашборды">
+                ${dashboards.map(renderClientDashboard).join("")}
               </section>`
             : '<section class="empty-state">Дашборды не настроены</section>'
         }
@@ -269,11 +247,7 @@ function renderClient() {
   `;
 }
 
-function renderClientFilters(activeDashboard) {
-  if (!activeDashboard?.filtersEnabled) {
-    return "";
-  }
-
+function renderClientFilters() {
   ensureDefaultFilters();
 
   return `
@@ -294,6 +268,26 @@ function renderClientFilters(activeDashboard) {
           ).join("")}
         </select>
       </div>
+    </section>
+  `;
+}
+
+function renderClientDashboard(dashboard) {
+  const dashboardUrl = buildDashboardUrl(dashboard);
+
+  return `
+    <section class="dashboard-panel">
+      <div class="dashboard-panel-head">
+        <h2>${escapeHtml(dashboard.title)}</h2>
+        ${
+          dashboardUrl
+            ? `<a class="link-button" href="${escapeHtml(dashboardUrl)}" target="_blank" rel="noopener">Открыть</a>`
+            : ""
+        }
+      </div>
+      <section class="dashboard-frame-wrap">
+        <iframe class="dashboard-frame" title="${escapeHtml(dashboard.title)}" src="${escapeHtml(dashboardUrl)}" allowfullscreen></iframe>
+      </section>
     </section>
   `;
 }
@@ -608,13 +602,7 @@ document.addEventListener("click", async (event) => {
       state.user = null;
       state.clientData = null;
       state.adminState = null;
-      state.activeDashboardId = null;
       setNotice(null);
-      render();
-    }
-
-    if (action === "select-dashboard") {
-      state.activeDashboardId = button.dataset.dashboardId;
       render();
     }
 
