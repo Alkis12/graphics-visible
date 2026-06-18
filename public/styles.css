@@ -370,6 +370,12 @@ a:focus-visible {
   padding: 16px clamp(14px, 2.6vw, 30px) 30px;
 }
 
+.operational-stack {
+  display: grid;
+  gap: 22px;
+  padding: 16px clamp(14px, 2.6vw, 30px) 30px;
+}
+
 .dashboard-row-divider {
   height: 1px;
   background: linear-gradient(90deg, transparent, var(--line-strong), transparent);
@@ -394,6 +400,14 @@ a:focus-visible {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.operational-placeholder {
+  width: min(100%, 520px);
+  aspect-ratio: 1;
+  border: 1px solid rgba(134, 231, 176, 0.58);
+  border-radius: var(--radius);
+  background: #15a05a;
 }
 
 .empty-state {
@@ -588,5 +602,9 @@ a:focus-visible {
 
   .dashboard-panel-head h2 {
     white-space: normal;
+  }
+
+  .operational-placeholder {
+    width: 100%;
   }
 }

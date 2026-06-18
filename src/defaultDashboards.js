@@ -6,7 +6,7 @@ export const DEFAULT_CLIENT = {
 export const DEFAULT_DASHBOARDS = [
   {
     key: "max-tickets",
-    title: "Билеты MAX",
+    title: "Билеты",
     description: "Отслеживание билетов MAX",
     url: "https://datalens.yandex/i1bvc2rk1gyw2?_embedded=1&_no_controls=1&_theme=dark",
     filtersEnabled: true,
@@ -14,7 +14,7 @@ export const DEFAULT_DASHBOARDS = [
   },
   {
     key: "max-price",
-    title: "Цены продаж MAX",
+    title: "Цены продаж",
     description: "Отслеживание цены продаж всех категорий MAX",
     url: "https://datalens.yandex/l4f7v9hp1g9a5?_embedded=1&_no_controls=1&_theme=dark",
     filtersEnabled: true,
@@ -22,7 +22,7 @@ export const DEFAULT_DASHBOARDS = [
   },
   {
     key: "tickets",
-    title: "Билеты",
+    title: "Билеты (базовый)",
     description: "Отслеживание билетов",
     url: "https://datalens.yandex/3jbj88gnek4un?_embedded=1&_no_controls=1&_theme=dark",
     filtersEnabled: true,
@@ -30,7 +30,7 @@ export const DEFAULT_DASHBOARDS = [
   },
   {
     key: "all-categories",
-    title: "Все категории",
+    title: "Все категории (базовый)",
     description: "Отслеживание всех категорий",
     url: "https://datalens.yandex/euo4f8jr1ff8y?_embedded=1&_no_controls=1&_theme=dark",
     filtersEnabled: true,

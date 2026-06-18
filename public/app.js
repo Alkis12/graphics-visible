@@ -5,6 +5,7 @@ const state = {
   clientData: null,
   adminState: null,
   activeAdminTab: "clients",
+  activeClientTab: "operational",
   filters: {
     category: "",
     eventValue: "",
@@ -27,6 +28,11 @@ const FILTER_CATEGORIES = [
   "Партер 3 Общая",
 ];
 const FILTER_EVENTS = buildEventOptions("2026-05-28", "2026-07-31");
+const CLIENT_TABS = {
+  operational: "Оперативный дашборд",
+  salesMetrics: "Отслеживание метрик продаж",
+};
+const OPERATIONAL_DASHBOARD_URL = "https://datalens.yandex/i0yioelotv302?_no_controls=1";
 
 function buildEventOptions(startDate, endDate) {
   const options = [];
@@ -219,7 +225,8 @@ function renderLogin() {
 function renderClient() {
   const dashboards = state.clientData?.dashboards || [];
   const clientName = state.clientData?.client?.name || state.user.clientName || "Client";
-  const hasFilters = dashboards.some((dashboard) => dashboard.filtersEnabled);
+  const isSalesMetricsTab = state.activeClientTab === "salesMetrics";
+  const hasFilters = isSalesMetricsTab && dashboards.some((dashboard) => dashboard.filtersEnabled);
 
   app.innerHTML = `
     <section class="client-shell">
@@ -235,14 +242,44 @@ function renderClient() {
         </div>
       </header>
       <div class="dashboard-workspace ${hasFilters ? "has-filters" : ""}">
+        <nav class="tabs client-view-tabs" aria-label="Представления дашбордов">
+          ${Object.entries(CLIENT_TABS)
+            .map(
+              ([key, label]) => `
+                <button class="tab ${state.activeClientTab === key ? "is-active" : ""}" type="button" data-action="client-tab" data-tab="${escapeHtml(key)}">
+                  ${escapeHtml(label)}
+                </button>
+              `,
+            )
+            .join("")}
+        </nav>
         ${
-          dashboards.length
+          state.activeClientTab === "operational"
+            ? renderOperationalDashboard()
+            : dashboards.length
             ? `<section class="dashboard-stack" aria-label="Дашборды">
                 ${renderClientDashboards(dashboards)}
               </section>`
             : '<section class="empty-state">Дашборды не настроены</section>'
         }
       </div>
+    </section>
+  `;
+}
+
+function renderOperationalDashboard() {
+  return `
+    <section class="operational-stack" aria-label="Оперативный дашборд">
+      <section class="dashboard-panel">
+        <div class="dashboard-panel-head">
+          <h2>Оперативный дашборд</h2>
+          <a class="link-button" href="${escapeHtml(OPERATIONAL_DASHBOARD_URL)}" target="_blank" rel="noopener">Открыть</a>
+        </div>
+        <section class="dashboard-frame-wrap">
+          <iframe class="dashboard-frame" title="Оперативный дашборд" src="${escapeHtml(OPERATIONAL_DASHBOARD_URL)}" allowfullscreen></iframe>
+        </section>
+      </section>
+      <div class="operational-placeholder" aria-label="Новый график"></div>
     </section>
   `;
 }
@@ -614,7 +651,11 @@ document.addEventListener("change", (event) => {
 });
 
 document.addEventListener("keydown", (event) => {
-  if (state.user?.role !== "client" || !["ArrowLeft", "ArrowRight"].includes(event.key)) {
+  if (
+    state.user?.role !== "client" ||
+    state.activeClientTab !== "salesMetrics" ||
+    !["ArrowLeft", "ArrowRight"].includes(event.key)
+  ) {
     return;
   }
 
@@ -647,6 +688,12 @@ document.addEventListener("click", async (event) => {
 
     if (action === "admin-tab") {
       state.activeAdminTab = button.dataset.tab;
+      setNotice(null);
+      render();
+    }
+
+    if (action === "client-tab") {
+      state.activeClientTab = button.dataset.tab;
       setNotice(null);
       render();
     }

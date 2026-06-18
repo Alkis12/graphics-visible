@@ -6,6 +6,12 @@ import { generatePassword, hashPassword, normalizeUsername } from "../src/securi
 
 const RESET_PASSWORDS = process.env.RESET_PASSWORDS === "1" || process.argv.includes("--reset-passwords");
 const now = new Date();
+const SEEDED_DASHBOARD_TITLE_MIGRATIONS = {
+  "max-tickets": ["Билеты MAX"],
+  "max-price": ["Цены продаж MAX"],
+  tickets: ["Билеты"],
+  "all-categories": ["Все категории"],
+};
 
 function env(name, fallback) {
   const value = process.env[name];
@@ -116,6 +122,20 @@ async function upsertOdeon(db) {
       { clientId, key: dashboard.key, filtersEnabled: { $exists: false } },
       { $set: { filtersEnabled: dashboard.filtersEnabled === true, updatedAt: now } },
     );
+
+    const previousTitles = SEEDED_DASHBOARD_TITLE_MIGRATIONS[dashboard.key] || [];
+    if (previousTitles.length) {
+      await db.collection("dashboards").updateOne(
+        { clientId, key: dashboard.key, title: { $in: previousTitles } },
+        {
+          $set: {
+            title: dashboard.title,
+            description: dashboard.description,
+            updatedAt: now,
+          },
+        },
+      );
+    }
   }
 
   await db.collection("dashboards").deleteMany({
