@@ -32,7 +32,7 @@ const CLIENT_TABS = {
   operational: "Оперативный дашборд",
   salesMetrics: "Отслеживание метрик продаж",
 };
-const OPERATIONAL_DASHBOARD_URL = "https://datalens.yandex/i0yioelotv302?_no_controls=1";
+const OPERATIONAL_DASHBOARD_URL = "https://datalens.yandex/i0yioelotv302?_no_controls=1&_theme=dark";
 
 function buildEventOptions(startDate, endDate) {
   const options = [];
@@ -272,11 +272,11 @@ function renderOperationalDashboard() {
     <section class="operational-stack" aria-label="Оперативный дашборд">
       <section class="dashboard-panel">
         <div class="dashboard-panel-head">
-          <h2>Оперативный дашборд</h2>
+          <h2>Проверка сбоев</h2>
           <a class="link-button" href="${escapeHtml(OPERATIONAL_DASHBOARD_URL)}" target="_blank" rel="noopener">Открыть</a>
         </div>
         <section class="dashboard-frame-wrap">
-          <iframe class="dashboard-frame" title="Оперативный дашборд" src="${escapeHtml(OPERATIONAL_DASHBOARD_URL)}" allowfullscreen></iframe>
+          <iframe class="dashboard-frame" title="Проверка сбоев" src="${escapeHtml(OPERATIONAL_DASHBOARD_URL)}" allowfullscreen></iframe>
         </section>
       </section>
       <div class="operational-placeholder" aria-label="Новый график"></div>
