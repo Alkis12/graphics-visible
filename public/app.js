@@ -33,6 +33,7 @@ const CLIENT_TABS = {
   salesMetrics: "Отслеживание метрик продаж",
 };
 const OPERATIONAL_DASHBOARD_URL = "https://datalens.yandex/i0yioelotv302?_no_controls=1&_theme=dark";
+const OPERATIONAL_SECOND_DASHBOARD_URL = "https://datalens.yandex/wfanps3o636qf?_no_controls=1&_theme=dark";
 
 function buildEventOptions(startDate, endDate) {
   const options = [];
@@ -279,7 +280,15 @@ function renderOperationalDashboard() {
           <iframe class="dashboard-frame" title="Проверка сбоев" src="${escapeHtml(OPERATIONAL_DASHBOARD_URL)}" allowfullscreen></iframe>
         </section>
       </section>
-      <div class="operational-placeholder" aria-label="Новый график"></div>
+      <section class="dashboard-panel">
+        <div class="dashboard-panel-head">
+          <h2>Новый график</h2>
+          <a class="link-button" href="${escapeHtml(OPERATIONAL_SECOND_DASHBOARD_URL)}" target="_blank" rel="noopener">Открыть</a>
+        </div>
+        <section class="dashboard-frame-wrap">
+          <iframe class="dashboard-frame" title="Новый график" src="${escapeHtml(OPERATIONAL_SECOND_DASHBOARD_URL)}" allowfullscreen></iframe>
+        </section>
+      </section>
     </section>
   `;
 }

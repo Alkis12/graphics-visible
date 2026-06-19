@@ -402,14 +402,6 @@ a:focus-visible {
   white-space: nowrap;
 }
 
-.operational-placeholder {
-  width: min(100%, 520px);
-  aspect-ratio: 1;
-  border: 1px solid rgba(134, 231, 176, 0.58);
-  border-radius: var(--radius);
-  background: #15a05a;
-}
-
 .empty-state {
   min-height: 240px;
   display: grid;
@@ -604,7 +596,4 @@ a:focus-visible {
     white-space: normal;
   }
 
-  .operational-placeholder {
-    width: 100%;
-  }
 }
