@@ -282,11 +282,11 @@ function renderOperationalDashboard() {
       </section>
       <section class="dashboard-panel">
         <div class="dashboard-panel-head">
-          <h2>Новый график</h2>
+          <h2>Ежедневный график проверки</h2>
           <a class="link-button" href="${escapeHtml(OPERATIONAL_SECOND_DASHBOARD_URL)}" target="_blank" rel="noopener">Открыть</a>
         </div>
         <section class="dashboard-frame-wrap">
-          <iframe class="dashboard-frame" title="Новый график" src="${escapeHtml(OPERATIONAL_SECOND_DASHBOARD_URL)}" allowfullscreen></iframe>
+          <iframe class="dashboard-frame" title="Ежедневный график проверки" src="${escapeHtml(OPERATIONAL_SECOND_DASHBOARD_URL)}" allowfullscreen></iframe>
         </section>
       </section>
     </section>
