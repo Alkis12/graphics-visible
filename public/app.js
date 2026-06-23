@@ -8,6 +8,7 @@ const state = {
   activeClientTab: "",
   selectedAdminClientId: "",
   selectedAdminDashboardTabId: "",
+  modal: null,
   filters: {
     category: "",
     eventValue: "",
@@ -78,7 +79,8 @@ function dateKey(date) {
 function formatEventLabel(value) {
   const date = value.slice(0, 10);
   const weekday = new Intl.DateTimeFormat("ru-RU", { weekday: "short" }).format(dateFromKey(date));
-  return `${date} (${weekday})`;
+  const [year, month, day] = date.split("-");
+  return `${day}.${month}.${year} (${weekday})`;
 }
 
 function formatTodayNote() {
@@ -383,6 +385,7 @@ function renderAdmin() {
         ${noticeHtml()}
         ${state.activeAdminTab === "clients" ? renderClientsAdmin() : renderDashboardsAdmin()}
       </section>
+      ${renderAdminModal()}
     </section>
   `;
 }
@@ -497,7 +500,6 @@ function renderDashboardsAdmin() {
   const client = selectedAdminClient();
   const tabs = client?.tabs || [];
   const activeTab = selectedAdminDashboardTab(client);
-  const dashboards = activeTab?.dashboards || [];
 
   return `
     <section class="panel">
@@ -523,120 +525,63 @@ function renderDashboardsAdmin() {
           <section class="panel">
             <div class="panel-head">
               <h2>Вкладки: ${escapeHtml(client.name)}</h2>
-            </div>
-            <form class="form-grid" data-action="create-dashboard-tab">
-              <input name="clientId" type="hidden" value="${escapeHtml(client.id)}">
-              <div class="field">
-                <label>Название вкладки</label>
-                <input name="title" required>
-              </div>
-              <div class="field">
-                <label>Порядок</label>
-                <input name="sortOrder" type="number" value="100" inputmode="numeric">
-              </div>
-              <label class="checkbox-field">
-                <input name="isActive" type="checkbox" checked>
-                Активна
-              </label>
-              <div class="field">
-                <button class="button button-primary" type="submit">Добавить вкладку</button>
-              </div>
-            </form>
-            <div class="tabs admin-dashboard-tabs" aria-label="Вкладки клиента">
-              ${
-                tabs.length
-                  ? tabs
-                      .map(
-                        (tab) => `
-                          <button class="tab ${tab.id === activeTab?.id ? "is-active" : ""}" type="button" data-action="select-admin-dashboard-tab" data-tab-id="${escapeHtml(tab.id)}">
-                            ${escapeHtml(tab.title)}
-                          </button>
-                        `,
-                      )
-                      .join("")
-                  : '<div class="empty-state compact">Вкладок пока нет</div>'
-              }
+              <button class="button button-primary" type="button" data-action="open-create-dashboard-tab-modal" data-client-id="${escapeHtml(client.id)}">Добавить вкладку</button>
             </div>
             <div class="list">
-              ${tabs.map(renderDashboardTabRow).join("")}
+              ${
+                tabs.length
+                  ? tabs.map((tab) => renderDashboardTabRow(tab, tab.id === activeTab?.id)).join("")
+                  : '<div class="empty-state compact">Вкладок пока нет</div>'
+              }
             </div>
           </section>
         `
         : '<section class="panel"><div class="empty-state compact">Сначала создайте клиента</div></section>'
     }
-    ${
-      activeTab
-        ? `
-          <section class="panel">
-            <div class="panel-head">
-              <h2>Графики: ${escapeHtml(activeTab.title)}</h2>
-            </div>
-            <form class="form-grid" data-action="create-dashboard">
-              <input name="tabId" type="hidden" value="${escapeHtml(activeTab.id)}">
-              <div class="field">
-                <label>Название</label>
-                <input name="title" required>
-              </div>
-              <div class="field">
-                <label>Порядок</label>
-                <input name="sortOrder" type="number" value="100" inputmode="numeric">
-              </div>
-              <div class="field field-wide">
-                <label>Ссылка, id или iframe DataLens</label>
-                <input name="url" required>
-              </div>
-              <div class="field">
-                <label>Описание</label>
-                <input name="description">
-              </div>
-              <label class="checkbox-field">
-                <input name="isActive" type="checkbox" checked>
-                Активен
-              </label>
-              <label class="checkbox-field">
-                <input name="filtersEnabled" type="checkbox" checked>
-                Фильтры
-              </label>
-              <div class="field">
-                <button class="button button-primary" type="submit">Добавить график</button>
-              </div>
-            </form>
-          </section>
-          <section class="panel">
-            <div class="list">
-              ${
-                dashboards.length
-                  ? dashboards.map(renderDashboardRow).join("")
-                  : '<div class="empty-state">Графиков во вкладке пока нет</div>'
-              }
-            </div>
-          </section>
-        `
-        : ""
-    }
   `;
 }
 
-function renderDashboardTabRow(tab) {
+function renderDashboardTabRow(tab, isOpen) {
+  const dashboards = tab.dashboards || [];
+
   return `
-    <form class="row-form row-grid dashboard-tab-row-grid" data-action="save-dashboard-tab" data-tab-id="${escapeHtml(tab.id)}">
-      <div class="field">
-        <label>Название</label>
-        <input name="title" value="${escapeHtml(tab.title)}" required>
+    <article class="dashboard-tab-item ${isOpen ? "is-open" : ""}">
+      <button class="dashboard-tab-toggle" type="button" data-action="select-admin-dashboard-tab" data-tab-id="${escapeHtml(tab.id)}">
+        <span>${escapeHtml(tab.title)}</span>
+        <span class="muted">${escapeHtml(dashboards.length)} граф.</span>
+      </button>
+      <div class="dashboard-tab-body" ${isOpen ? "" : "hidden"}>
+        <form class="row-form row-grid dashboard-tab-row-grid" data-action="save-dashboard-tab" data-tab-id="${escapeHtml(tab.id)}">
+          <div class="field">
+            <label>Название</label>
+            <input name="title" value="${escapeHtml(tab.title)}" required>
+          </div>
+          <div class="field">
+            <label>Порядок</label>
+            <input name="sortOrder" type="number" value="${escapeHtml(tab.sortOrder)}" inputmode="numeric">
+          </div>
+          <label class="checkbox-field">
+            <input name="isActive" type="checkbox" ${checked(tab.isActive)}>
+            Активна
+          </label>
+          <div class="row-actions">
+            <button class="button button-small" type="submit">Сохранить</button>
+            <button class="button button-small button-danger" type="button" data-action="delete-dashboard-tab" data-tab-id="${escapeHtml(tab.id)}">Удалить</button>
+          </div>
+        </form>
+        <div class="dashboard-tab-content-head">
+          <h3>Графики</h3>
+          <button class="button button-primary button-small" type="button" data-action="open-create-dashboard-modal" data-tab-id="${escapeHtml(tab.id)}">Добавить график</button>
+        </div>
+        <div class="list">
+          ${
+            dashboards.length
+              ? dashboards.map(renderDashboardRow).join("")
+              : '<div class="empty-state compact">Графиков во вкладке пока нет</div>'
+          }
+        </div>
       </div>
-      <div class="field">
-        <label>Порядок</label>
-        <input name="sortOrder" type="number" value="${escapeHtml(tab.sortOrder)}" inputmode="numeric">
-      </div>
-      <label class="checkbox-field">
-        <input name="isActive" type="checkbox" ${checked(tab.isActive)}>
-        Активна
-      </label>
-      <div class="row-actions">
-        <button class="button button-small" type="submit">Сохранить</button>
-        <button class="button button-small button-danger" type="button" data-action="delete-dashboard-tab" data-tab-id="${escapeHtml(tab.id)}">Удалить</button>
-      </div>
-    </form>
+    </article>
   `;
 }
 
@@ -670,6 +615,104 @@ function renderDashboardRow(dashboard) {
       </div>
     </form>
   `;
+}
+
+function renderAdminModal() {
+  if (!state.modal) {
+    return "";
+  }
+
+  if (state.modal.type === "createTab") {
+    const client = adminClients().find((item) => item.id === state.modal.clientId);
+    if (!client) {
+      return "";
+    }
+
+    return `
+      <div class="modal-backdrop" data-action="close-modal">
+        <section class="modal-panel" role="dialog" aria-modal="true" aria-labelledby="create-tab-title">
+          <div class="modal-head">
+            <h2 id="create-tab-title">Добавить вкладку</h2>
+            <button class="button button-small" type="button" data-action="close-modal">Закрыть</button>
+          </div>
+          <form class="form-grid" data-action="create-dashboard-tab">
+            <input name="clientId" type="hidden" value="${escapeHtml(client.id)}">
+            <div class="field">
+              <label>Название вкладки</label>
+              <input name="title" required autofocus>
+            </div>
+            <div class="field">
+              <label>Порядок</label>
+              <input name="sortOrder" type="number" value="100" inputmode="numeric">
+            </div>
+            <label class="checkbox-field">
+              <input name="isActive" type="checkbox" checked>
+              Активна
+            </label>
+            <div class="modal-actions">
+              <button class="button" type="button" data-action="close-modal">Отмена</button>
+              <button class="button button-primary" type="submit">Добавить вкладку</button>
+            </div>
+          </form>
+        </section>
+      </div>
+    `;
+  }
+
+  if (state.modal.type === "createDashboard") {
+    const tab = (selectedAdminClient()?.tabs || []).find((item) => item.id === state.modal.tabId);
+    if (!tab) {
+      return "";
+    }
+
+    return `
+      <div class="modal-backdrop" data-action="close-modal">
+        <section class="modal-panel modal-panel-wide" role="dialog" aria-modal="true" aria-labelledby="create-dashboard-title">
+          <div class="modal-head">
+            <h2 id="create-dashboard-title">Добавить график</h2>
+            <button class="button button-small" type="button" data-action="close-modal">Закрыть</button>
+          </div>
+          <form class="form-grid" data-action="create-dashboard">
+            <input name="tabId" type="hidden" value="${escapeHtml(tab.id)}">
+            <div class="field">
+              <label>Вкладка</label>
+              <input value="${escapeHtml(tab.title)}" disabled>
+            </div>
+            <div class="field">
+              <label>Порядок</label>
+              <input name="sortOrder" type="number" value="100" inputmode="numeric">
+            </div>
+            <div class="field">
+              <label>Название</label>
+              <input name="title" required autofocus>
+            </div>
+            <div class="field">
+              <label>Описание</label>
+              <input name="description">
+            </div>
+            <div class="field field-wide">
+              <label>Ссылка, id или iframe DataLens</label>
+              <input name="url" required>
+            </div>
+            <label class="checkbox-field">
+              <input name="isActive" type="checkbox" checked>
+              Активен
+            </label>
+            <label class="checkbox-field">
+              <input name="filtersEnabled" type="checkbox" checked>
+              Фильтры
+            </label>
+            <div class="modal-actions">
+              <button class="button" type="button" data-action="close-modal">Отмена</button>
+              <button class="button button-primary" type="submit">Добавить график</button>
+            </div>
+          </form>
+        </section>
+      </div>
+    `;
+  }
+
+  return "";
 }
 
 document.addEventListener("submit", async (event) => {
@@ -728,7 +771,10 @@ document.addEventListener("submit", async (event) => {
         method: "POST",
         body: JSON.stringify(values),
       });
-      state.selectedAdminDashboardTabId = "";
+      const client = adminClients().find((item) => item.id === values.clientId);
+      const createdTab = client?.tabs?.find((tab) => tab.title === values.title);
+      state.selectedAdminDashboardTabId = createdTab?.id || "";
+      state.modal = null;
       setNotice("Вкладка добавлена");
       render();
     }
@@ -752,6 +798,7 @@ document.addEventListener("submit", async (event) => {
         method: "POST",
         body: JSON.stringify(values),
       });
+      state.modal = null;
       setNotice("Дашборд добавлен");
       render();
     }
@@ -824,8 +871,38 @@ document.addEventListener("click", async (event) => {
   }
 
   const action = button.dataset.action;
+  if (action === "close-modal" && button.classList.contains("modal-backdrop") && event.target !== button) {
+    return;
+  }
 
   try {
+    if (action === "close-modal") {
+      state.modal = null;
+      render();
+      return;
+    }
+
+    if (action === "open-create-dashboard-tab-modal") {
+      state.modal = {
+        type: "createTab",
+        clientId: button.dataset.clientId,
+      };
+      setNotice(null);
+      render();
+      return;
+    }
+
+    if (action === "open-create-dashboard-modal") {
+      state.modal = {
+        type: "createDashboard",
+        tabId: button.dataset.tabId,
+      };
+      state.selectedAdminDashboardTabId = button.dataset.tabId;
+      setNotice(null);
+      render();
+      return;
+    }
+
     if (action === "logout") {
       await api("/api/auth/logout", { method: "POST" });
       state.user = null;
