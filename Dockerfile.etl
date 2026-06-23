@@ -1,0 +1,11 @@
+FROM python:3.12-slim
+
+WORKDIR /app
+ENV PYTHONUNBUFFERED=1
+
+COPY src/etl/requirements.txt src/etl/requirements.txt
+RUN pip install --no-cache-dir -r src/etl/requirements.txt
+
+COPY src src
+
+CMD ["python", "src/etl/worker.py"]

@@ -20,8 +20,31 @@ services:
       ODEON_PASSWORD: ${ODEON_PASSWORD:-}
       PUBLIC_MONGO_USERNAME: ${PUBLIC_MONGO_USERNAME:-dashboards_user}
       PUBLIC_MONGO_PASSWORD: ${PUBLIC_MONGO_PASSWORD:-}
+      ETL_EXECUTION_MODE: external
     ports:
       - "${APP_HOST:-127.0.0.1}:${APP_PORT:-8080}:80"
+    networks:
+      - graphics_visible
+
+  etl_scripts:
+    build:
+      context: .
+      dockerfile: Dockerfile.etl
+    container_name: graphics_visible_etl_scripts
+    restart: unless-stopped
+    depends_on:
+      mongo:
+        condition: service_healthy
+    environment:
+      LOG_LEVEL: ${ETL_LOG_LEVEL:-INFO}
+      ETL_POLL_SECONDS: ${ETL_POLL_SECONDS:-3}
+      MONGO_DB: ${MONGO_DB:-planetra_dashboards}
+      MONGO_URL: ${MONGO_URL:-mongodb://${MONGO_ROOT_USER:-dashboards_admin}:${MONGO_ROOT_PASSWORD:-}@mongo:27017/${MONGO_DB:-planetra_dashboards}?authSource=admin}
+      PLANETRA_DB_HOST: ${PLANETRA_DB_HOST:-}
+      PLANETRA_DB_PORT: ${PLANETRA_DB_PORT:-}
+      PLANETRA_DB_NAME: ${PLANETRA_DB_NAME:-}
+      PLANETRA_DB_USER: ${PLANETRA_DB_USER:-}
+      PLANETRA_DB_PASSWORD: ${PLANETRA_DB_PASSWORD:-}
     networks:
       - graphics_visible
 

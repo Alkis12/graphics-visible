@@ -17,4 +17,5 @@ export const config = {
   cookieSecure: process.env.COOKIE_SECURE === "true",
   trustProxy: process.env.TRUST_PROXY === "true",
   bcryptRounds: integerFromEnv("BCRYPT_ROUNDS", 12),
+  etlExecutionMode: process.env.ETL_EXECUTION_MODE || "inline",
 };

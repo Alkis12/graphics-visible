@@ -5,7 +5,10 @@ import express from "express";
 import session from "express-session";
 import { ObjectId } from "mongodb";
 import { config } from "./config.js";
+import { buildDatalensUrl, normalizeDatalensId } from "./datalens.js";
 import { ensureIndexes, getDb } from "./db.js";
+import { DEFAULT_CLIENT, DEFAULT_DASHBOARD_TABS, DEFAULT_DASHBOARDS } from "./defaultDashboards.js";
+import { startEtlRun } from "./etl/runner.js";
 import {
   asyncHandler,
   cleanString,
@@ -79,7 +82,7 @@ function publicUser(user, client = null) {
   };
 }
 
-function serializeClient(client, user = null, dashboards = []) {
+function serializeClient(client, user = null, tabs = []) {
   return {
     id: String(client._id),
     name: client.name,
@@ -93,19 +96,44 @@ function serializeClient(client, user = null, dashboards = []) {
           username: user.username,
           isActive: user.isActive !== false,
           updatedAt: user.updatedAt,
-        }
+      }
       : null,
+    tabs,
+  };
+}
+
+function serializeDashboardTab(tab, dashboards = []) {
+  return {
+    id: String(tab._id),
+    clientId: String(tab.clientId),
+    key: tab.key || "",
+    title: tab.title,
+    sortOrder: tab.sortOrder || 0,
+    isActive: tab.isActive !== false,
+    createdAt: tab.createdAt,
+    updatedAt: tab.updatedAt,
     dashboards: dashboards.map(serializeDashboard),
   };
 }
 
 function serializeDashboard(dashboard) {
+  let datalensId = dashboard.datalensId || "";
+  if (!datalensId && dashboard.url) {
+    try {
+      datalensId = normalizeDatalensId(dashboard.url);
+    } catch {
+      datalensId = "";
+    }
+  }
   return {
     id: String(dashboard._id),
     clientId: String(dashboard.clientId),
+    tabId: dashboard.tabId ? String(dashboard.tabId) : null,
     title: dashboard.title,
     description: dashboard.description || "",
-    url: dashboard.url,
+    datalensId,
+    url: datalensId ? buildDatalensUrl(datalensId) : dashboard.url || "",
+    sourceInput: dashboard.sourceInput || dashboard.url || "",
     filtersEnabled: dashboard.filtersEnabled === true,
     sortOrder: dashboard.sortOrder || 0,
     isActive: dashboard.isActive !== false,
@@ -114,20 +142,77 @@ function serializeDashboard(dashboard) {
   };
 }
 
+function serializeEtlScript(script) {
+  return {
+    id: String(script._id),
+    clientId: String(script.clientId),
+    name: script.name,
+    key: script.key,
+    handler: script.handler || "google_data",
+    sourceType: script.sourceType || "googleSheets",
+    sourceUrl: script.sourceUrl || "",
+    spreadsheetId: script.spreadsheetId || "",
+    sheetRange: script.sheetRange || "",
+    targetSchema: script.targetSchema || "sdco",
+    targetTable: script.targetTable || "",
+    loadMode: script.loadMode || "replace",
+    expectedRows: script.expectedRows || "",
+    mockFailureStage: script.mockFailureStage || "",
+    mockFailureElement: script.mockFailureElement || "",
+    sortOrder: script.sortOrder || 0,
+    isActive: script.isActive !== false,
+    createdAt: script.createdAt,
+    updatedAt: script.updatedAt,
+  };
+}
+
+function serializeEtlRun(run) {
+  return {
+    id: String(run._id),
+    scriptId: run.scriptId ? String(run.scriptId) : null,
+    clientId: run.clientId ? String(run.clientId) : null,
+    scriptName: run.scriptName,
+    sourceType: run.sourceType || "",
+    sourceName: run.sourceName || "",
+    status: run.status,
+    startedBy: {
+      userId: run.startedBy?.userId ? String(run.startedBy.userId) : null,
+      username: run.startedBy?.username || "",
+      role: run.startedBy?.role || "",
+    },
+    rowsRead: run.rowsRead || 0,
+    stages: run.stages || [],
+    error: run.error || null,
+    createdAt: run.createdAt,
+    startedAt: run.startedAt,
+    finishedAt: run.finishedAt,
+    updatedAt: run.updatedAt,
+  };
+}
+
 async function buildAdminState(db) {
-  const [clients, users, dashboards] = await Promise.all([
+  const [clients, users, tabs, dashboards] = await Promise.all([
     db.collection("clients").find().sort({ name: 1 }).toArray(),
     db.collection("users").find({ role: "client" }).sort({ username: 1 }).toArray(),
+    db.collection("dashboardTabs").find().sort({ sortOrder: 1, title: 1 }).toArray(),
     db.collection("dashboards").find().sort({ sortOrder: 1, title: 1 }).toArray(),
   ]);
 
   const usersByClientId = new Map(users.map((user) => [String(user.clientId), user]));
-  const dashboardsByClientId = dashboards.reduce((acc, dashboard) => {
-    const key = String(dashboard.clientId);
+  const dashboardsByTabId = dashboards.reduce((acc, dashboard) => {
+    const key = String(dashboard.tabId);
     if (!acc.has(key)) {
       acc.set(key, []);
     }
     acc.get(key).push(dashboard);
+    return acc;
+  }, new Map());
+  const tabsByClientId = tabs.reduce((acc, tab) => {
+    const key = String(tab.clientId);
+    if (!acc.has(key)) {
+      acc.set(key, []);
+    }
+    acc.get(key).push(tab);
     return acc;
   }, new Map());
 
@@ -136,34 +221,192 @@ async function buildAdminState(db) {
       serializeClient(
         client,
         usersByClientId.get(String(client._id)) || null,
-        dashboardsByClientId.get(String(client._id)) || [],
+        (tabsByClientId.get(String(client._id)) || []).map((tab) =>
+          serializeDashboardTab(tab, dashboardsByTabId.get(String(tab._id)) || []),
+        ),
       ),
     ),
+    tabs: tabs.map((tab) => serializeDashboardTab(tab, dashboardsByTabId.get(String(tab._id)) || [])),
     dashboards: dashboards.map(serializeDashboard),
   };
 }
 
-function normalizeDashboardUrl(value) {
-  let url = cleanString(value);
+function normalizeDashboardInput(value) {
+  const sourceInput = cleanString(value);
+  return {
+    datalensId: normalizeDatalensId(sourceInput),
+    sourceInput,
+  };
+}
 
-  if (/^[a-z0-9]{8,}$/i.test(url)) {
-    url = `https://datalens.yandex/${url}`;
-  } else if (/^datalens\.yandex\//i.test(url)) {
-    url = `https://${url}`;
-  }
+async function upsertDashboardTab(db, clientId, tab) {
+  const now = new Date();
+  const result = await db.collection("dashboardTabs").findOneAndUpdate(
+    { clientId, key: tab.key },
+    {
+      $set: {
+        clientId,
+        key: tab.key,
+        updatedAt: now,
+      },
+      $setOnInsert: {
+        title: tab.title,
+        sortOrder: tab.sortOrder || 0,
+        isActive: tab.isActive !== false,
+        createdAt: now,
+      },
+    },
+    { upsert: true, returnDocument: "after" },
+  );
 
-  try {
-    const parsed = new URL(url);
-    if (parsed.protocol !== "https:" && parsed.protocol !== "http:") {
-      throw new Error("Unsupported protocol");
+  return result.value || (await db.collection("dashboardTabs").findOne({ clientId, key: tab.key }));
+}
+
+async function migrateDashboardTabs(db) {
+  const now = new Date();
+  const clients = await db.collection("clients").find().toArray();
+  const odeonClient = clients.find((client) => client.slug === DEFAULT_CLIENT.slug);
+  const odeonTabIdsByKey = new Map();
+
+  if (odeonClient) {
+    for (const tab of DEFAULT_DASHBOARD_TABS) {
+      const savedTab = await upsertDashboardTab(db, odeonClient._id, tab);
+      odeonTabIdsByKey.set(tab.key, savedTab._id);
     }
-  } catch {
-    const error = new Error("Введите корректную ссылку");
-    error.status = 400;
-    throw error;
+
+    for (const dashboard of DEFAULT_DASHBOARDS) {
+      const tabId = odeonTabIdsByKey.get(dashboard.tabKey);
+      if (!tabId) {
+        continue;
+      }
+
+      await db.collection("dashboards").updateOne(
+        { clientId: odeonClient._id, key: dashboard.key },
+        {
+          $set: {
+            clientId: odeonClient._id,
+            tabId,
+            key: dashboard.key,
+            updatedAt: now,
+          },
+          $setOnInsert: {
+            title: dashboard.title,
+            description: dashboard.description || "",
+            datalensId: dashboard.datalensId,
+            sourceInput: dashboard.datalensId,
+            filtersEnabled: dashboard.filtersEnabled === true,
+            sortOrder: dashboard.sortOrder || 0,
+            isActive: true,
+            createdAt: now,
+          },
+        },
+        { upsert: true },
+      );
+    }
   }
 
-  return url;
+  for (const client of clients) {
+    let fallbackTab = await db.collection("dashboardTabs").findOne({ clientId: client._id }, { sort: { sortOrder: 1 } });
+    if (!fallbackTab) {
+      fallbackTab = await upsertDashboardTab(db, client._id, {
+        key: "dashboards",
+        title: "Дашборды",
+        sortOrder: 10,
+      });
+    }
+
+    const dashboards = await db.collection("dashboards").find({ clientId: client._id }).toArray();
+    for (const dashboard of dashboards) {
+      const patch = { updatedAt: now };
+
+      if (!dashboard.tabId) {
+        patch.tabId =
+          client.slug === DEFAULT_CLIENT.slug && dashboard.key
+            ? odeonTabIdsByKey.get(DEFAULT_DASHBOARDS.find((item) => item.key === dashboard.key)?.tabKey) || fallbackTab._id
+            : fallbackTab._id;
+      }
+
+      if (!dashboard.datalensId) {
+        const source = dashboard.url || dashboard.sourceInput || "";
+        if (source) {
+          try {
+            patch.datalensId = normalizeDatalensId(source);
+            patch.sourceInput = dashboard.sourceInput || source;
+            patch.url = "";
+          } catch {
+            // Invalid legacy links stay untouched so the admin can fix them manually.
+          }
+        }
+      }
+
+      if (Object.keys(patch).length > 1) {
+        await db.collection("dashboards").updateOne({ _id: dashboard._id }, { $set: patch });
+      }
+    }
+  }
+}
+
+function etlRunQueryForUser(user) {
+  if (user.role === "admin") {
+    return {};
+  }
+
+  return {
+    clientId: new ObjectId(user.clientId),
+    "startedBy.userId": new ObjectId(user.id),
+  };
+}
+
+function etlScriptQueryForUser(user) {
+  if (user.role === "admin") {
+    return {};
+  }
+
+  return {
+    clientId: new ObjectId(user.clientId),
+    isActive: { $ne: false },
+  };
+}
+
+async function buildEtlState(db, user) {
+  const [scripts, runs, clients] = await Promise.all([
+    db
+      .collection("etlScripts")
+      .find(etlScriptQueryForUser(user))
+      .sort({ sortOrder: 1, name: 1 })
+      .toArray(),
+    db
+      .collection("etlRuns")
+      .find(etlRunQueryForUser(user))
+      .sort({ createdAt: -1 })
+      .limit(100)
+      .toArray(),
+    user.role === "admin"
+      ? db.collection("clients").find().sort({ name: 1 }).toArray()
+      : Promise.resolve([]),
+  ]);
+
+  return {
+    clients: clients.map((client) => ({
+      id: String(client._id),
+      name: client.name,
+      slug: client.slug,
+      isActive: client.isActive !== false,
+    })),
+    scripts: scripts.map(serializeEtlScript),
+    runs: runs.map(serializeEtlRun),
+  };
+}
+
+async function loadEtlScriptForUser(db, user, scriptId) {
+  const query = { _id: scriptId };
+
+  if (user.role !== "admin") {
+    query.clientId = new ObjectId(user.clientId);
+    query.isActive = { $ne: false };
+  }
+
+  return db.collection("etlScripts").findOne(query);
 }
 
 app.get("/health", (_req, res) => {
@@ -237,14 +480,29 @@ app.get(
 
     const clientId = new ObjectId(req.session.user.clientId);
     const client = await db.collection("clients").findOne({ _id: clientId });
-    const dashboards = await db
-      .collection("dashboards")
+    const tabs = await db
+      .collection("dashboardTabs")
       .find({ clientId, isActive: { $ne: false } })
       .sort({ sortOrder: 1, title: 1 })
       .toArray();
+    const tabIds = tabs.map((tab) => tab._id);
+    const dashboards = await db
+      .collection("dashboards")
+      .find({ clientId, tabId: { $in: tabIds }, isActive: { $ne: false } })
+      .sort({ sortOrder: 1, title: 1 })
+      .toArray();
+    const dashboardsByTabId = dashboards.reduce((acc, dashboard) => {
+      const key = String(dashboard.tabId);
+      if (!acc.has(key)) {
+        acc.set(key, []);
+      }
+      acc.get(key).push(dashboard);
+      return acc;
+    }, new Map());
 
     res.json({
       client: client ? serializeClient(client) : null,
+      tabs: tabs.map((tab) => serializeDashboardTab(tab, dashboardsByTabId.get(String(tab._id)) || [])),
       dashboards: dashboards.map(serializeDashboard),
     });
   }),
@@ -395,9 +653,94 @@ app.delete(
     const clientId = objectIdFromParam(req.params.id);
 
     await Promise.all([
+      db.collection("dashboardTabs").deleteMany({ clientId }),
       db.collection("dashboards").deleteMany({ clientId }),
       db.collection("users").deleteMany({ role: "client", clientId }),
       db.collection("clients").deleteOne({ _id: clientId }),
+    ]);
+
+    res.json(await buildAdminState(db));
+  }),
+);
+
+app.post(
+  "/api/admin/dashboard-tabs",
+  requireAdmin,
+  asyncHandler(async (req, res) => {
+    const db = await getDb();
+    const now = new Date();
+    const clientId = objectIdFromParam(req.body.clientId);
+    const title = cleanString(req.body.title);
+
+    if (!title) {
+      res.status(400).json({ error: "Название вкладки не может быть пустым" });
+      return;
+    }
+
+    const client = await db.collection("clients").findOne({ _id: clientId });
+    if (!client) {
+      res.status(404).json({ error: "Клиент не найден" });
+      return;
+    }
+
+    await db.collection("dashboardTabs").insertOne({
+      clientId,
+      title,
+      sortOrder: Number.parseInt(req.body.sortOrder || "0", 10) || 0,
+      isActive: toBoolean(req.body.isActive, true),
+      createdAt: now,
+      updatedAt: now,
+    });
+
+    res.status(201).json(await buildAdminState(db));
+  }),
+);
+
+app.patch(
+  "/api/admin/dashboard-tabs/:id",
+  requireAdmin,
+  asyncHandler(async (req, res) => {
+    const db = await getDb();
+    const tabId = objectIdFromParam(req.params.id);
+    const patch = { updatedAt: new Date() };
+
+    if (req.body.title !== undefined) {
+      const title = cleanString(req.body.title);
+      if (!title) {
+        res.status(400).json({ error: "Название вкладки не может быть пустым" });
+        return;
+      }
+      patch.title = title;
+    }
+
+    if (req.body.sortOrder !== undefined) {
+      patch.sortOrder = Number.parseInt(req.body.sortOrder || "0", 10) || 0;
+    }
+
+    if (req.body.isActive !== undefined) {
+      patch.isActive = toBoolean(req.body.isActive);
+    }
+
+    const result = await db.collection("dashboardTabs").updateOne({ _id: tabId }, { $set: patch });
+    if (!result.matchedCount) {
+      res.status(404).json({ error: "Вкладка не найдена" });
+      return;
+    }
+
+    res.json(await buildAdminState(db));
+  }),
+);
+
+app.delete(
+  "/api/admin/dashboard-tabs/:id",
+  requireAdmin,
+  asyncHandler(async (req, res) => {
+    const db = await getDb();
+    const tabId = objectIdFromParam(req.params.id);
+
+    await Promise.all([
+      db.collection("dashboards").deleteMany({ tabId }),
+      db.collection("dashboardTabs").deleteOne({ _id: tabId }),
     ]);
 
     res.json(await buildAdminState(db));
@@ -410,26 +753,28 @@ app.post(
   asyncHandler(async (req, res) => {
     const db = await getDb();
     const now = new Date();
-    const clientId = objectIdFromParam(req.body.clientId);
+    const tabId = objectIdFromParam(req.body.tabId);
     const title = cleanString(req.body.title);
-    const url = normalizeDashboardUrl(req.body.url);
+    const dashboardInput = normalizeDashboardInput(req.body.url || req.body.datalensId || req.body.sourceInput);
 
     if (!title) {
       res.status(400).json({ error: "Название дашборда не может быть пустым" });
       return;
     }
 
-    const client = await db.collection("clients").findOne({ _id: clientId });
-    if (!client) {
-      res.status(404).json({ error: "Клиент не найден" });
+    const tab = await db.collection("dashboardTabs").findOne({ _id: tabId });
+    if (!tab) {
+      res.status(404).json({ error: "Вкладка не найдена" });
       return;
     }
 
     await db.collection("dashboards").insertOne({
-      clientId,
+      clientId: tab.clientId,
+      tabId,
       title,
       description: cleanString(req.body.description),
-      url,
+      datalensId: dashboardInput.datalensId,
+      sourceInput: dashboardInput.sourceInput,
       filtersEnabled: toBoolean(req.body.filtersEnabled, false),
       sortOrder: Number.parseInt(req.body.sortOrder || "0", 10) || 0,
       isActive: toBoolean(req.body.isActive, true),
@@ -449,8 +794,15 @@ app.patch(
     const dashboardId = objectIdFromParam(req.params.id);
     const patch = { updatedAt: new Date() };
 
-    if (req.body.clientId !== undefined) {
-      patch.clientId = objectIdFromParam(req.body.clientId);
+    if (req.body.tabId !== undefined) {
+      const tabId = objectIdFromParam(req.body.tabId);
+      const tab = await db.collection("dashboardTabs").findOne({ _id: tabId });
+      if (!tab) {
+        res.status(404).json({ error: "Вкладка не найдена" });
+        return;
+      }
+      patch.tabId = tabId;
+      patch.clientId = tab.clientId;
     }
 
     if (req.body.title !== undefined) {
@@ -466,8 +818,11 @@ app.patch(
       patch.description = cleanString(req.body.description);
     }
 
-    if (req.body.url !== undefined) {
-      patch.url = normalizeDashboardUrl(req.body.url);
+    if (req.body.url !== undefined || req.body.datalensId !== undefined || req.body.sourceInput !== undefined) {
+      const dashboardInput = normalizeDashboardInput(req.body.url || req.body.datalensId || req.body.sourceInput);
+      patch.datalensId = dashboardInput.datalensId;
+      patch.sourceInput = dashboardInput.sourceInput;
+      patch.url = "";
     }
 
     if (req.body.filtersEnabled !== undefined) {
@@ -504,6 +859,191 @@ app.delete(
   }),
 );
 
+app.get(
+  "/api/etl/state",
+  requireAuth,
+  asyncHandler(async (req, res) => {
+    const db = await getDb();
+    res.json(await buildEtlState(db, req.session.user));
+  }),
+);
+
+app.post(
+  "/api/admin/etl/scripts",
+  requireAdmin,
+  asyncHandler(async (req, res) => {
+    const db = await getDb();
+    const now = new Date();
+    const clientId = objectIdFromParam(req.body.clientId);
+    const name = cleanString(req.body.name);
+    const key = slugify(req.body.key || name);
+
+    if (!name || !key) {
+      res.status(400).json({ error: "Заполните название и ключ загрузки" });
+      return;
+    }
+
+    const client = await db.collection("clients").findOne({ _id: clientId });
+    if (!client) {
+      res.status(404).json({ error: "Клиент не найден" });
+      return;
+    }
+
+    await db.collection("etlScripts").insertOne({
+      clientId,
+      name,
+      key,
+      handler: cleanString(req.body.handler) || "google_data",
+      sourceType: cleanString(req.body.sourceType) || "googleSheets",
+      sourceUrl: cleanString(req.body.sourceUrl),
+      spreadsheetId: cleanString(req.body.spreadsheetId),
+      sheetRange: cleanString(req.body.sheetRange),
+      targetSchema: cleanString(req.body.targetSchema) || "sdco",
+      targetTable: cleanString(req.body.targetTable),
+      loadMode: cleanString(req.body.loadMode) || "replace",
+      expectedRows: cleanString(req.body.expectedRows),
+      mockFailureStage: cleanString(req.body.mockFailureStage),
+      mockFailureElement: cleanString(req.body.mockFailureElement),
+      sortOrder: Number.parseInt(req.body.sortOrder || "0", 10) || 0,
+      isActive: toBoolean(req.body.isActive, true),
+      createdAt: now,
+      updatedAt: now,
+    });
+
+    res.status(201).json(await buildEtlState(db, req.session.user));
+  }),
+);
+
+app.patch(
+  "/api/admin/etl/scripts/:id",
+  requireAdmin,
+  asyncHandler(async (req, res) => {
+    const db = await getDb();
+    const scriptId = objectIdFromParam(req.params.id);
+    const patch = { updatedAt: new Date() };
+
+    if (req.body.clientId !== undefined) {
+      patch.clientId = objectIdFromParam(req.body.clientId);
+    }
+
+    if (req.body.name !== undefined) {
+      const name = cleanString(req.body.name);
+      if (!name) {
+        res.status(400).json({ error: "Название загрузки не может быть пустым" });
+        return;
+      }
+      patch.name = name;
+    }
+
+    if (req.body.key !== undefined) {
+      const key = slugify(req.body.key);
+      if (!key) {
+        res.status(400).json({ error: "Ключ загрузки не может быть пустым" });
+        return;
+      }
+      patch.key = key;
+    }
+
+    if (req.body.sourceType !== undefined) {
+      patch.sourceType = cleanString(req.body.sourceType) || "googleSheets";
+    }
+
+    if (req.body.handler !== undefined) {
+      patch.handler = cleanString(req.body.handler) || "google_data";
+    }
+
+    if (req.body.sourceUrl !== undefined) {
+      patch.sourceUrl = cleanString(req.body.sourceUrl);
+    }
+
+    if (req.body.spreadsheetId !== undefined) {
+      patch.spreadsheetId = cleanString(req.body.spreadsheetId);
+    }
+
+    if (req.body.sheetRange !== undefined) {
+      patch.sheetRange = cleanString(req.body.sheetRange);
+    }
+
+    if (req.body.targetSchema !== undefined) {
+      patch.targetSchema = cleanString(req.body.targetSchema) || "sdco";
+    }
+
+    if (req.body.targetTable !== undefined) {
+      patch.targetTable = cleanString(req.body.targetTable);
+    }
+
+    if (req.body.loadMode !== undefined) {
+      patch.loadMode = cleanString(req.body.loadMode) || "replace";
+    }
+
+    if (req.body.expectedRows !== undefined) {
+      patch.expectedRows = cleanString(req.body.expectedRows);
+    }
+
+    if (req.body.mockFailureStage !== undefined) {
+      patch.mockFailureStage = cleanString(req.body.mockFailureStage);
+    }
+
+    if (req.body.mockFailureElement !== undefined) {
+      patch.mockFailureElement = cleanString(req.body.mockFailureElement);
+    }
+
+    if (req.body.sortOrder !== undefined) {
+      patch.sortOrder = Number.parseInt(req.body.sortOrder || "0", 10) || 0;
+    }
+
+    if (req.body.isActive !== undefined) {
+      patch.isActive = toBoolean(req.body.isActive);
+    }
+
+    const result = await db.collection("etlScripts").updateOne({ _id: scriptId }, { $set: patch });
+    if (!result.matchedCount) {
+      res.status(404).json({ error: "Загрузка не найдена" });
+      return;
+    }
+
+    res.json(await buildEtlState(db, req.session.user));
+  }),
+);
+
+app.delete(
+  "/api/admin/etl/scripts/:id",
+  requireAdmin,
+  asyncHandler(async (req, res) => {
+    const db = await getDb();
+    const scriptId = objectIdFromParam(req.params.id);
+
+    await db.collection("etlScripts").deleteOne({ _id: scriptId });
+    res.json(await buildEtlState(db, req.session.user));
+  }),
+);
+
+app.post(
+  "/api/etl/scripts/:id/run",
+  requireAuth,
+  asyncHandler(async (req, res) => {
+    const db = await getDb();
+    const scriptId = objectIdFromParam(req.params.id);
+    const script = await loadEtlScriptForUser(db, req.session.user, scriptId);
+
+    if (!script) {
+      res.status(404).json({ error: "Загрузка не найдена или недоступна" });
+      return;
+    }
+
+    const run = await startEtlRun({
+      script,
+      user: req.session.user,
+      source: {
+        type: cleanString(req.body.sourceType),
+        name: cleanString(req.body.sourceName),
+      },
+    });
+
+    res.status(202).json({ run: serializeEtlRun(run) });
+  }),
+);
+
 app.get("*", (_req, res) => {
   res.sendFile(path.join(publicDir, "index.html"));
 });
@@ -526,6 +1066,7 @@ app.use((error, _req, res, _next) => {
 
 const db = await getDb();
 await ensureIndexes(db);
+await migrateDashboardTabs(db);
 
 app.listen(config.port, () => {
   console.log(`graphics-visible listening on ${config.port}`);

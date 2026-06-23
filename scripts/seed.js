@@ -1,5 +1,5 @@
 import { ObjectId } from "mongodb";
-import { DEFAULT_CLIENT, DEFAULT_DASHBOARDS } from "../src/defaultDashboards.js";
+import { DEFAULT_CLIENT, DEFAULT_DASHBOARD_TABS, DEFAULT_DASHBOARDS } from "../src/defaultDashboards.js";
 import { config } from "../src/config.js";
 import { ensureIndexes, getDb } from "../src/db.js";
 import { generatePassword, hashPassword, normalizeUsername } from "../src/security.js";
@@ -7,6 +7,8 @@ import { generatePassword, hashPassword, normalizeUsername } from "../src/securi
 const RESET_PASSWORDS = process.env.RESET_PASSWORDS === "1" || process.argv.includes("--reset-passwords");
 const now = new Date();
 const SEEDED_DASHBOARD_TITLE_MIGRATIONS = {
+  "operational-failures": ["Проверка сбоев"],
+  "daily-check": ["Ежедневный график проверки"],
   "max-tickets": ["Билеты MAX"],
   "max-price": ["Цены продаж MAX"],
   tickets: ["Билеты"],
@@ -96,18 +98,43 @@ async function upsertOdeon(db) {
     await db.collection("users").updateOne({ _id: existing._id }, { $set: patch });
   }
 
+  const tabsByKey = new Map();
+  for (const tab of DEFAULT_DASHBOARD_TABS) {
+    const tabResult = await db.collection("dashboardTabs").findOneAndUpdate(
+      { clientId, key: tab.key },
+      {
+        $set: {
+          clientId,
+          key: tab.key,
+          updatedAt: now,
+        },
+        $setOnInsert: {
+          title: tab.title,
+          sortOrder: tab.sortOrder,
+          isActive: true,
+          createdAt: now,
+        },
+      },
+      { upsert: true, returnDocument: "after" },
+    );
+    tabsByKey.set(tab.key, tabResult.value?._id || tabResult._id || new ObjectId(tabResult.lastErrorObject?.upserted));
+  }
+
   for (const dashboard of DEFAULT_DASHBOARDS) {
+    const tabId = tabsByKey.get(dashboard.tabKey);
     await db.collection("dashboards").updateOne(
       { clientId, key: dashboard.key },
       {
         $set: {
           clientId,
+          tabId,
           key: dashboard.key,
         },
         $setOnInsert: {
           title: dashboard.title,
           description: dashboard.description,
-          url: dashboard.url,
+          datalensId: dashboard.datalensId,
+          sourceInput: dashboard.datalensId,
           filtersEnabled: dashboard.filtersEnabled === true,
           sortOrder: dashboard.sortOrder,
           isActive: true,

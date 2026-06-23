@@ -22,7 +22,20 @@ export async function ensureIndexes(db) {
     db.collection("clients").createIndex({ slug: 1 }, { unique: true }),
     db.collection("users").createIndex({ username: 1 }, { unique: true }),
     db.collection("users").createIndex({ role: 1, clientId: 1 }),
+    db.collection("dashboardTabs").createIndex({ clientId: 1, sortOrder: 1, title: 1 }),
+    db
+      .collection("dashboardTabs")
+      .createIndex(
+        { clientId: 1, key: 1 },
+        { unique: true, partialFilterExpression: { key: { $exists: true } } },
+      ),
     db.collection("dashboards").createIndex({ clientId: 1, sortOrder: 1 }),
+    db.collection("dashboards").createIndex({ tabId: 1, sortOrder: 1 }),
+    db.collection("etlScripts").createIndex({ clientId: 1, sortOrder: 1, name: 1 }),
+    db.collection("etlScripts").createIndex({ clientId: 1, key: 1 }, { unique: true }),
+    db.collection("etlRuns").createIndex({ clientId: 1, createdAt: -1 }),
+    db.collection("etlRuns").createIndex({ "startedBy.userId": 1, createdAt: -1 }),
+    db.collection("etlRuns").createIndex({ scriptId: 1, createdAt: -1 }),
     db
       .collection("dashboards")
       .createIndex(

@@ -4,8 +4,11 @@ const state = {
   user: null,
   clientData: null,
   adminState: null,
+  etlState: null,
   activeAdminTab: "clients",
-  activeClientTab: "operational",
+  activeClientTab: "",
+  selectedAdminClientId: "",
+  selectedAdminDashboardTabId: "",
   filters: {
     category: "",
     eventValue: "",
@@ -28,12 +31,17 @@ const FILTER_CATEGORIES = [
   "Партер 3 Общая",
 ];
 const FILTER_EVENTS = buildEventOptions("2026-05-28", "2026-07-31");
-const CLIENT_TABS = {
-  operational: "Оперативный дашборд",
-  salesMetrics: "Отслеживание метрик продаж",
+const ETL_STAGES = [
+  "",
+  "Подключение к источнику",
+  "Чтение данных",
+  "Трансформация",
+  "Запись в БД SCDO",
+];
+const ETL_HANDLERS = {
+  google_data: "Workbook Google Sheets",
+  marketing_statistics: "Маркетинговая статистика",
 };
-const OPERATIONAL_DASHBOARD_URL = "https://datalens.yandex/i0yioelotv302?_no_controls=1&_theme=dark";
-const OPERATIONAL_SECOND_DASHBOARD_URL = "https://datalens.yandex/wfanps3o636qf?_no_controls=1&_theme=dark";
 
 function buildEventOptions(startDate, endDate) {
   const options = [];
@@ -85,6 +93,42 @@ function formatEventLabel(value) {
   return `${date} (${weekday})`;
 }
 
+function formatTodayNote() {
+  const today = new Date();
+  const date = new Intl.DateTimeFormat("ru-RU", {
+    day: "2-digit",
+    month: "2-digit",
+  }).format(today);
+  const weekday = new Intl.DateTimeFormat("ru-RU", { weekday: "short" }).format(today).replace(".", "");
+  return `сегодня ${date}, ${weekday}`;
+}
+
+function formatDateTime(value) {
+  if (!value) {
+    return "—";
+  }
+
+  return new Intl.DateTimeFormat("ru-RU", {
+    dateStyle: "short",
+    timeStyle: "medium",
+  }).format(new Date(value));
+}
+
+function etlStatusLabel(status) {
+  return (
+    {
+      queued: "В очереди",
+      running: "Выполняется",
+      success: "Успешно",
+      error: "Ошибка",
+    }[status] || status
+  );
+}
+
+function etlStatusClass(status) {
+  return status === "success" ? "status-success" : status === "error" ? "status-error" : "status-progress";
+}
+
 function ensureDefaultFilters() {
   if (state.filters.eventValue) {
     return;
@@ -97,12 +141,13 @@ function ensureDefaultFilters() {
 }
 
 function buildDashboardUrl(dashboard) {
-  if (!dashboard?.url) {
+  const baseUrl = dashboard?.datalensId ? `https://datalens.yandex/${dashboard.datalensId}` : dashboard?.url;
+  if (!baseUrl) {
     return "";
   }
 
   try {
-    const url = new URL(dashboard.url, window.location.origin);
+    const url = new URL(baseUrl, window.location.origin);
     url.searchParams.set("_embedded", "1");
     url.searchParams.set("_no_controls", "1");
     url.searchParams.set("_theme", "dark");
@@ -168,14 +213,18 @@ async function loadAdminState() {
   state.adminState = await api("/api/admin/state");
 }
 
+async function loadEtlState() {
+  state.etlState = await api("/api/etl/state");
+}
+
 async function boot() {
   try {
     const payload = await api("/api/me");
     state.user = payload.user;
     if (state.user?.role === "admin") {
-      await loadAdminState();
+      await Promise.all([loadAdminState(), loadEtlState()]);
     } else if (state.user?.role === "client") {
-      await loadClientData();
+      await Promise.all([loadClientData(), loadEtlState()]);
     }
   } catch {
     state.user = null;
@@ -223,11 +272,28 @@ function renderLogin() {
   `;
 }
 
+function clientDashboardTabs() {
+  return state.clientData?.tabs || [];
+}
+
+function activeDashboardTab() {
+  const tabs = clientDashboardTabs();
+  if (!tabs.length) {
+    state.activeClientTab = "";
+    return null;
+  }
+
+  const activeTab = tabs.find((tab) => tab.id === state.activeClientTab) || tabs[0];
+  state.activeClientTab = activeTab.id;
+  return activeTab;
+}
+
 function renderClient() {
-  const dashboards = state.clientData?.dashboards || [];
+  const tabs = clientDashboardTabs();
+  const activeTab = state.activeClientTab === "dataLoad" ? null : activeDashboardTab();
+  const dashboards = activeTab?.dashboards || [];
   const clientName = state.clientData?.client?.name || state.user.clientName || "Client";
-  const isSalesMetricsTab = state.activeClientTab === "salesMetrics";
-  const hasFilters = isSalesMetricsTab && dashboards.some((dashboard) => dashboard.filtersEnabled);
+  const hasFilters = dashboards.some((dashboard) => dashboard.filtersEnabled);
 
   app.innerHTML = `
     <section class="client-shell">
@@ -244,19 +310,20 @@ function renderClient() {
       </header>
       <div class="dashboard-workspace ${hasFilters ? "has-filters" : ""}">
         <nav class="tabs client-view-tabs" aria-label="Представления дашбордов">
-          ${Object.entries(CLIENT_TABS)
+          ${tabs
             .map(
-              ([key, label]) => `
-                <button class="tab ${state.activeClientTab === key ? "is-active" : ""}" type="button" data-action="client-tab" data-tab="${escapeHtml(key)}">
-                  ${escapeHtml(label)}
+              (tab) => `
+                <button class="tab ${state.activeClientTab === tab.id ? "is-active" : ""}" type="button" data-action="client-tab" data-tab="${escapeHtml(tab.id)}">
+                  ${escapeHtml(tab.title)}
                 </button>
               `,
             )
             .join("")}
+          <button class="tab ${state.activeClientTab === "dataLoad" ? "is-active" : ""}" type="button" data-action="client-tab" data-tab="dataLoad">Загрузка данных</button>
         </nav>
         ${
-          state.activeClientTab === "operational"
-            ? renderOperationalDashboard()
+          state.activeClientTab === "dataLoad"
+            ? renderClientEtl()
             : dashboards.length
             ? `<section class="dashboard-stack" aria-label="Дашборды">
                 ${renderClientDashboards(dashboards)}
@@ -264,31 +331,6 @@ function renderClient() {
             : '<section class="empty-state">Дашборды не настроены</section>'
         }
       </div>
-    </section>
-  `;
-}
-
-function renderOperationalDashboard() {
-  return `
-    <section class="operational-stack" aria-label="Оперативный дашборд">
-      <section class="dashboard-panel">
-        <div class="dashboard-panel-head">
-          <h2>Проверка сбоев</h2>
-          <a class="link-button" href="${escapeHtml(OPERATIONAL_DASHBOARD_URL)}" target="_blank" rel="noopener">Открыть</a>
-        </div>
-        <section class="dashboard-frame-wrap">
-          <iframe class="dashboard-frame" title="Проверка сбоев" src="${escapeHtml(OPERATIONAL_DASHBOARD_URL)}" allowfullscreen></iframe>
-        </section>
-      </section>
-      <section class="dashboard-panel">
-        <div class="dashboard-panel-head">
-          <h2>Ежедневный график проверки</h2>
-          <a class="link-button" href="${escapeHtml(OPERATIONAL_SECOND_DASHBOARD_URL)}" target="_blank" rel="noopener">Открыть</a>
-        </div>
-        <section class="dashboard-frame-wrap">
-          <iframe class="dashboard-frame" title="Ежедневный график проверки" src="${escapeHtml(OPERATIONAL_SECOND_DASHBOARD_URL)}" allowfullscreen></iframe>
-        </section>
-      </section>
     </section>
   `;
 }
@@ -311,6 +353,7 @@ function renderClientFilters() {
             (eventValue) => `<option value="${escapeHtml(eventValue)}" ${eventValue === state.filters.eventValue ? "selected" : ""}>${escapeHtml(formatEventLabel(eventValue))}</option>`,
           ).join("")}
         </select>
+        <div class="field-note">${escapeHtml(formatTodayNote())}</div>
       </div>
       <div class="field">
         <label for="client-category-filter">Категория билета</label>
@@ -341,6 +384,120 @@ function renderClientDashboard(dashboard) {
         <iframe class="dashboard-frame" title="${escapeHtml(dashboard.title)}" src="${escapeHtml(dashboardUrl)}" allowfullscreen></iframe>
       </section>
     </section>
+  `;
+}
+
+function renderClientEtl() {
+  const scripts = state.etlState?.scripts || [];
+  const runs = state.etlState?.runs || [];
+
+  return `
+    <section class="etl-workspace">
+      <section class="panel">
+        <div class="panel-head">
+          <h2>Загрузки</h2>
+          <button class="button button-small" type="button" data-action="refresh-etl">Обновить</button>
+        </div>
+        <div class="etl-script-grid">
+          ${
+            scripts.length
+              ? scripts.map(renderClientEtlScript).join("")
+              : '<div class="empty-state compact">Загрузки пока не настроены</div>'
+          }
+        </div>
+      </section>
+      ${renderEtlRuns(runs)}
+    </section>
+  `;
+}
+
+function renderClientEtlScript(script) {
+  return `
+    <article class="etl-script-card">
+      <div class="etl-script-title">
+        <h3>${escapeHtml(script.name)}</h3>
+        <span class="muted">${escapeHtml(script.sourceType === "file" ? "Файл" : "Google Sheets")}</span>
+      </div>
+      <dl class="etl-meta">
+        <div><dt>Скрипт</dt><dd>${escapeHtml(ETL_HANDLERS[script.handler] || script.handler || "—")}</dd></div>
+        <div><dt>ID таблицы</dt><dd>${escapeHtml(script.spreadsheetId || "—")}</dd></div>
+        <div><dt>Диапазон</dt><dd>${escapeHtml(script.sheetRange || "—")}</dd></div>
+        <div><dt>Цель</dt><dd>${escapeHtml(`${script.targetSchema || "sdco"}.${script.targetTable || "по умолчанию"}`)}</dd></div>
+      </dl>
+      <div class="row-actions">
+        <button class="button button-primary" type="button" data-action="run-etl" data-script-id="${escapeHtml(script.id)}">Запустить перелив</button>
+      </div>
+    </article>
+  `;
+}
+
+function renderEtlRuns(runs) {
+  return `
+    <section class="panel">
+      <div class="panel-head">
+        <h2>Журнал запусков</h2>
+      </div>
+      <div class="etl-run-list">
+        ${
+          runs.length
+            ? runs.map(renderEtlRun).join("")
+            : '<div class="empty-state compact">Запусков пока нет</div>'
+        }
+      </div>
+    </section>
+  `;
+}
+
+function renderEtlRun(run) {
+  return `
+    <article class="etl-run-row">
+      <div class="etl-run-main">
+        <div>
+          <h3>${escapeHtml(run.scriptName)}</h3>
+          <div class="muted">${escapeHtml(formatDateTime(run.createdAt))} · ${escapeHtml(run.startedBy?.username || "—")}</div>
+        </div>
+        <span class="status-pill ${etlStatusClass(run.status)}">${escapeHtml(etlStatusLabel(run.status))}</span>
+      </div>
+      <dl class="etl-meta">
+        <div><dt>Источник</dt><dd>${escapeHtml(run.sourceName || run.sourceType || "—")}</dd></div>
+        <div><dt>Строк прочитано</dt><dd>${escapeHtml(run.rowsRead)}</dd></div>
+      </dl>
+      ${renderEtlStages(run.stages || [])}
+      ${run.error ? renderEtlError(run.error) : ""}
+    </article>
+  `;
+}
+
+function renderEtlStages(stages) {
+  if (!stages.length) {
+    return '<div class="muted">Ожидает запуска фоновой задачи</div>';
+  }
+
+  return `
+    <ol class="etl-stage-list">
+      ${stages
+        .map(
+          (stage) => `
+            <li>
+              <span class="status-dot ${etlStatusClass(stage.status)}"></span>
+              <div>
+                <strong>${escapeHtml(stage.name)}</strong>
+                <span>${escapeHtml(stage.detail || stage.error?.message || "")}</span>
+              </div>
+            </li>
+          `,
+        )
+        .join("")}
+    </ol>
+  `;
+}
+
+function renderEtlError(error) {
+  return `
+    <div class="etl-error">
+      Ошибка: этап "${escapeHtml(error.stage || "—")}", элемент "${escapeHtml(error.element || "—")}".
+      ${escapeHtml(error.message || "")}
+    </div>
   `;
 }
 
@@ -381,9 +538,16 @@ function renderAdmin() {
         <nav class="admin-nav" aria-label="Разделы админ-панели">
           <button class="tab ${state.activeAdminTab === "clients" ? "is-active" : ""}" type="button" data-action="admin-tab" data-tab="clients">Клиенты</button>
           <button class="tab ${state.activeAdminTab === "dashboards" ? "is-active" : ""}" type="button" data-action="admin-tab" data-tab="dashboards">Дашборды</button>
+          <button class="tab ${state.activeAdminTab === "etl" ? "is-active" : ""}" type="button" data-action="admin-tab" data-tab="etl">Загрузки</button>
         </nav>
         ${noticeHtml()}
-        ${state.activeAdminTab === "clients" ? renderClientsAdmin() : renderDashboardsAdmin()}
+        ${
+          state.activeAdminTab === "clients"
+            ? renderClientsAdmin()
+            : state.activeAdminTab === "dashboards"
+            ? renderDashboardsAdmin()
+            : renderEtlAdmin()
+        }
       </section>
     </section>
   `;
@@ -465,84 +629,194 @@ function renderClientRow(client) {
   `;
 }
 
+function adminClients() {
+  return state.adminState?.clients || [];
+}
+
+function selectedAdminClient() {
+  const clients = adminClients();
+  if (!clients.length) {
+    state.selectedAdminClientId = "";
+    state.selectedAdminDashboardTabId = "";
+    return null;
+  }
+
+  const client = clients.find((item) => item.id === state.selectedAdminClientId) || clients[0];
+  state.selectedAdminClientId = client.id;
+  return client;
+}
+
+function selectedAdminDashboardTab(client) {
+  const tabs = client?.tabs || [];
+  if (!tabs.length) {
+    state.selectedAdminDashboardTabId = "";
+    return null;
+  }
+
+  const tab = tabs.find((item) => item.id === state.selectedAdminDashboardTabId) || tabs[0];
+  state.selectedAdminDashboardTabId = tab.id;
+  return tab;
+}
+
 function renderDashboardsAdmin() {
-  const clients = state.adminState?.clients || [];
-  const dashboards = state.adminState?.dashboards || [];
+  const clients = adminClients();
+  const client = selectedAdminClient();
+  const tabs = client?.tabs || [];
+  const activeTab = selectedAdminDashboardTab(client);
+  const dashboards = activeTab?.dashboards || [];
 
   return `
     <section class="panel">
       <div class="panel-head">
         <h2>Дашборды</h2>
       </div>
-      <form class="form-grid" data-action="create-dashboard">
+      <div class="admin-client-picker">
         <div class="field">
           <label>Клиент</label>
-          <select name="clientId" required>
-            ${clients.map((client) => `<option value="${escapeHtml(client.id)}">${escapeHtml(client.name)}</option>`).join("")}
+          <select data-action="select-admin-client">
+            ${clients
+              .map(
+                (item) => `<option value="${escapeHtml(item.id)}" ${item.id === client?.id ? "selected" : ""}>${escapeHtml(item.name)}</option>`,
+              )
+              .join("")}
           </select>
         </div>
-        <div class="field">
-          <label>Название</label>
-          <input name="title" required>
-        </div>
-        <div class="field field-wide">
-          <label>Ссылка или код DataLens</label>
-          <input name="url" required>
-        </div>
-        <div class="field">
-          <label>Описание</label>
-          <input name="description">
-        </div>
-        <div class="field">
-          <label>Порядок</label>
-          <input name="sortOrder" type="number" value="100" inputmode="numeric">
-        </div>
-        <label class="checkbox-field">
-          <input name="isActive" type="checkbox" checked>
-          Активен
-        </label>
-        <label class="checkbox-field">
-          <input name="filtersEnabled" type="checkbox" checked>
-          Фильтры
-        </label>
-        <div class="field">
-          <button class="button button-primary" type="submit">Добавить</button>
-        </div>
-      </form>
-    </section>
-    <section class="panel">
-      <div class="list">
-        ${
-          dashboards.length
-            ? dashboards.map((dashboard) => renderDashboardRow(dashboard, clients)).join("")
-            : '<div class="empty-state">Дашбордов пока нет</div>'
-        }
       </div>
     </section>
+    ${
+      client
+        ? `
+          <section class="panel">
+            <div class="panel-head">
+              <h2>Вкладки: ${escapeHtml(client.name)}</h2>
+            </div>
+            <form class="form-grid" data-action="create-dashboard-tab">
+              <input name="clientId" type="hidden" value="${escapeHtml(client.id)}">
+              <div class="field">
+                <label>Название вкладки</label>
+                <input name="title" required>
+              </div>
+              <div class="field">
+                <label>Порядок</label>
+                <input name="sortOrder" type="number" value="100" inputmode="numeric">
+              </div>
+              <label class="checkbox-field">
+                <input name="isActive" type="checkbox" checked>
+                Активна
+              </label>
+              <div class="field">
+                <button class="button button-primary" type="submit">Добавить вкладку</button>
+              </div>
+            </form>
+            <div class="tabs admin-dashboard-tabs" aria-label="Вкладки клиента">
+              ${
+                tabs.length
+                  ? tabs
+                      .map(
+                        (tab) => `
+                          <button class="tab ${tab.id === activeTab?.id ? "is-active" : ""}" type="button" data-action="select-admin-dashboard-tab" data-tab-id="${escapeHtml(tab.id)}">
+                            ${escapeHtml(tab.title)}
+                          </button>
+                        `,
+                      )
+                      .join("")
+                  : '<div class="empty-state compact">Вкладок пока нет</div>'
+              }
+            </div>
+            <div class="list">
+              ${tabs.map(renderDashboardTabRow).join("")}
+            </div>
+          </section>
+        `
+        : '<section class="panel"><div class="empty-state compact">Сначала создайте клиента</div></section>'
+    }
+    ${
+      activeTab
+        ? `
+          <section class="panel">
+            <div class="panel-head">
+              <h2>Графики: ${escapeHtml(activeTab.title)}</h2>
+            </div>
+            <form class="form-grid" data-action="create-dashboard">
+              <input name="tabId" type="hidden" value="${escapeHtml(activeTab.id)}">
+              <div class="field">
+                <label>Название</label>
+                <input name="title" required>
+              </div>
+              <div class="field">
+                <label>Порядок</label>
+                <input name="sortOrder" type="number" value="100" inputmode="numeric">
+              </div>
+              <div class="field field-wide">
+                <label>Ссылка, id или iframe DataLens</label>
+                <input name="url" required>
+              </div>
+              <div class="field">
+                <label>Описание</label>
+                <input name="description">
+              </div>
+              <label class="checkbox-field">
+                <input name="isActive" type="checkbox" checked>
+                Активен
+              </label>
+              <label class="checkbox-field">
+                <input name="filtersEnabled" type="checkbox" checked>
+                Фильтры
+              </label>
+              <div class="field">
+                <button class="button button-primary" type="submit">Добавить график</button>
+              </div>
+            </form>
+          </section>
+          <section class="panel">
+            <div class="list">
+              ${
+                dashboards.length
+                  ? dashboards.map(renderDashboardRow).join("")
+                  : '<div class="empty-state">Графиков во вкладке пока нет</div>'
+              }
+            </div>
+          </section>
+        `
+        : ""
+    }
   `;
 }
 
-function renderDashboardRow(dashboard, clients) {
+function renderDashboardTabRow(tab) {
+  return `
+    <form class="row-form row-grid dashboard-tab-row-grid" data-action="save-dashboard-tab" data-tab-id="${escapeHtml(tab.id)}">
+      <div class="field">
+        <label>Название</label>
+        <input name="title" value="${escapeHtml(tab.title)}" required>
+      </div>
+      <div class="field">
+        <label>Порядок</label>
+        <input name="sortOrder" type="number" value="${escapeHtml(tab.sortOrder)}" inputmode="numeric">
+      </div>
+      <label class="checkbox-field">
+        <input name="isActive" type="checkbox" ${checked(tab.isActive)}>
+        Активна
+      </label>
+      <div class="row-actions">
+        <button class="button button-small" type="submit">Сохранить</button>
+        <button class="button button-small button-danger" type="button" data-action="delete-dashboard-tab" data-tab-id="${escapeHtml(tab.id)}">Удалить</button>
+      </div>
+    </form>
+  `;
+}
+
+function renderDashboardRow(dashboard) {
   return `
     <form class="dashboard-row row-grid dashboard-row-grid" data-action="save-dashboard" data-dashboard-id="${escapeHtml(dashboard.id)}">
-      <div class="field">
-        <label>Клиент</label>
-        <select name="clientId" required>
-          ${clients
-            .map(
-              (client) =>
-                `<option value="${escapeHtml(client.id)}" ${client.id === dashboard.clientId ? "selected" : ""}>${escapeHtml(client.name)}</option>`,
-            )
-            .join("")}
-        </select>
-      </div>
+      <input name="tabId" type="hidden" value="${escapeHtml(dashboard.tabId)}">
       <div class="field">
         <label>Название</label>
         <input name="title" value="${escapeHtml(dashboard.title)}" required>
       </div>
       <div class="field">
-        <label>Ссылка или код DataLens</label>
-        <input name="url" value="${escapeHtml(dashboard.url)}" required>
+        <label>Ссылка, id или iframe DataLens</label>
+        <input name="url" value="${escapeHtml(dashboard.datalensId || dashboard.url)}" required>
       </div>
       <div class="field">
         <label>Порядок</label>
@@ -559,6 +833,217 @@ function renderDashboardRow(dashboard, clients) {
       <div class="row-actions">
         <button class="button button-small" type="submit">Сохранить</button>
         <button class="button button-small button-danger" type="button" data-action="delete-dashboard" data-dashboard-id="${escapeHtml(dashboard.id)}">Удалить</button>
+      </div>
+    </form>
+  `;
+}
+
+function renderEtlAdmin() {
+  const clients = state.etlState?.clients || state.adminState?.clients || [];
+  const scripts = state.etlState?.scripts || [];
+  const runs = state.etlState?.runs || [];
+
+  return `
+    <section class="panel">
+      <div class="panel-head">
+        <h2>Настройка загрузки</h2>
+        <button class="button button-small" type="button" data-action="refresh-etl">Обновить журнал</button>
+      </div>
+      <form class="form-grid" data-action="create-etl-script">
+        <div class="field">
+          <label>Клиент</label>
+          <select name="clientId" required>
+            ${clients.map((client) => `<option value="${escapeHtml(client.id)}">${escapeHtml(client.name)}</option>`).join("")}
+          </select>
+        </div>
+        <div class="field">
+          <label>Название</label>
+          <input name="name" required>
+        </div>
+        <div class="field">
+          <label>Ключ</label>
+          <input name="key" autocapitalize="none" placeholder="sales-import">
+        </div>
+        <div class="field">
+          <label>Скрипт</label>
+          <select name="handler">
+            <option value="google_data">Workbook Google Sheets</option>
+            <option value="marketing_statistics">Маркетинговая статистика</option>
+          </select>
+        </div>
+        <div class="field">
+          <label>Тип источника</label>
+          <select name="sourceType">
+            <option value="googleSheets">Google Sheets</option>
+            <option value="file">Файл</option>
+          </select>
+        </div>
+        <div class="field field-wide">
+          <label>URL источника</label>
+          <input name="sourceUrl" placeholder="https://docs.google.com/spreadsheets/d/.../edit#gid=...">
+        </div>
+        <div class="field">
+          <label>ID Google Sheets</label>
+          <input name="spreadsheetId">
+        </div>
+        <div class="field">
+          <label>Лист / диапазон</label>
+          <input name="sheetRange" placeholder="Client или Лист1!A:Z">
+        </div>
+        <div class="field">
+          <label>Схема БД</label>
+          <input name="targetSchema" value="sdco">
+        </div>
+        <div class="field">
+          <label>Таблица БД</label>
+          <input name="targetTable" placeholder="Marketing_Statistics">
+        </div>
+        <div class="field">
+          <label>Режим</label>
+          <select name="loadMode">
+            <option value="replace">replace</option>
+            <option value="delete-insert">delete-insert</option>
+            <option value="append">append</option>
+          </select>
+        </div>
+        <div class="field">
+          <label>Ожидаемо строк</label>
+          <input name="expectedRows" type="number" min="0" inputmode="numeric">
+        </div>
+        <div class="field">
+          <label>Порядок</label>
+          <input name="sortOrder" type="number" value="100" inputmode="numeric">
+        </div>
+        <div class="field">
+          <label>Тестовая ошибка</label>
+          <select name="mockFailureStage">
+            ${ETL_STAGES.map((stage) => `<option value="${escapeHtml(stage)}">${escapeHtml(stage || "Нет")}</option>`).join("")}
+          </select>
+        </div>
+        <div class="field">
+          <label>Элемент ошибки</label>
+          <input name="mockFailureElement" placeholder="строка 42, колонка email">
+        </div>
+        <label class="checkbox-field">
+          <input name="isActive" type="checkbox" checked>
+          Активна
+        </label>
+        <div class="field">
+          <button class="button button-primary" type="submit">Добавить загрузку</button>
+        </div>
+      </form>
+    </section>
+    <section class="panel">
+      <div class="panel-head">
+        <h2>Загрузки клиентов</h2>
+      </div>
+      <div class="list">
+        ${
+          scripts.length
+            ? scripts.map((script) => renderEtlScriptRow(script, clients)).join("")
+            : '<div class="empty-state compact">Загрузки пока не настроены</div>'
+        }
+      </div>
+    </section>
+    ${renderEtlRuns(runs)}
+  `;
+}
+
+function renderEtlScriptRow(script, clients) {
+  return `
+    <form class="etl-row row-grid etl-row-grid" data-action="save-etl-script" data-script-id="${escapeHtml(script.id)}">
+      <div class="field">
+        <label>Клиент</label>
+        <select name="clientId" required>
+          ${clients
+            .map(
+              (client) =>
+                `<option value="${escapeHtml(client.id)}" ${client.id === script.clientId ? "selected" : ""}>${escapeHtml(client.name)}</option>`,
+            )
+            .join("")}
+        </select>
+      </div>
+      <div class="field">
+        <label>Название</label>
+        <input name="name" value="${escapeHtml(script.name)}" required>
+      </div>
+      <div class="field">
+        <label>Ключ</label>
+        <input name="key" value="${escapeHtml(script.key)}" autocapitalize="none" required>
+      </div>
+      <div class="field">
+        <label>Скрипт</label>
+        <select name="handler">
+          ${Object.entries(ETL_HANDLERS)
+            .map(
+              ([key, label]) => `<option value="${escapeHtml(key)}" ${key === script.handler ? "selected" : ""}>${escapeHtml(label)}</option>`,
+            )
+            .join("")}
+        </select>
+      </div>
+      <div class="field">
+        <label>URL</label>
+        <input name="sourceUrl" value="${escapeHtml(script.sourceUrl)}">
+      </div>
+      <div class="field">
+        <label>ID таблицы</label>
+        <input name="spreadsheetId" value="${escapeHtml(script.spreadsheetId)}">
+      </div>
+      <div class="field">
+        <label>Лист</label>
+        <input name="sheetRange" value="${escapeHtml(script.sheetRange)}">
+      </div>
+      <div class="field">
+        <label>Схема</label>
+        <input name="targetSchema" value="${escapeHtml(script.targetSchema)}">
+      </div>
+      <div class="field">
+        <label>Таблица</label>
+        <input name="targetTable" value="${escapeHtml(script.targetTable)}">
+      </div>
+      <div class="field">
+        <label>Режим</label>
+        <select name="loadMode">
+          <option value="replace" ${script.loadMode === "replace" ? "selected" : ""}>replace</option>
+          <option value="delete-insert" ${script.loadMode === "delete-insert" ? "selected" : ""}>delete-insert</option>
+          <option value="append" ${script.loadMode === "append" ? "selected" : ""}>append</option>
+        </select>
+      </div>
+      <div class="field">
+        <label>Тип</label>
+        <select name="sourceType">
+          <option value="googleSheets" ${script.sourceType === "googleSheets" ? "selected" : ""}>Google Sheets</option>
+          <option value="file" ${script.sourceType === "file" ? "selected" : ""}>Файл</option>
+        </select>
+      </div>
+      <div class="field">
+        <label>Строк</label>
+        <input name="expectedRows" type="number" min="0" value="${escapeHtml(script.expectedRows)}" inputmode="numeric">
+      </div>
+      <div class="field">
+        <label>Ошибка</label>
+        <select name="mockFailureStage">
+          ${ETL_STAGES.map(
+            (stage) => `<option value="${escapeHtml(stage)}" ${stage === script.mockFailureStage ? "selected" : ""}>${escapeHtml(stage || "Нет")}</option>`,
+          ).join("")}
+        </select>
+      </div>
+      <div class="field">
+        <label>Элемент</label>
+        <input name="mockFailureElement" value="${escapeHtml(script.mockFailureElement)}">
+      </div>
+      <div class="field">
+        <label>Порядок</label>
+        <input name="sortOrder" type="number" value="${escapeHtml(script.sortOrder)}" inputmode="numeric">
+      </div>
+      <label class="checkbox-field">
+        <input name="isActive" type="checkbox" ${checked(script.isActive)}>
+        Активна
+      </label>
+      <div class="row-actions">
+        <button class="button button-small" type="button" data-action="run-etl" data-script-id="${escapeHtml(script.id)}">Запуск</button>
+        <button class="button button-small" type="submit">Сохранить</button>
+        <button class="button button-small button-danger" type="button" data-action="delete-etl-script" data-script-id="${escapeHtml(script.id)}">Удалить</button>
       </div>
     </form>
   `;
@@ -582,9 +1067,9 @@ document.addEventListener("submit", async (event) => {
       state.user = payload.user;
       setNotice(null);
       if (state.user.role === "admin") {
-        await loadAdminState();
+        await Promise.all([loadAdminState(), loadEtlState()]);
       } else {
-        await loadClientData();
+        await Promise.all([loadClientData(), loadEtlState()]);
       }
       render();
     }
@@ -613,6 +1098,29 @@ document.addEventListener("submit", async (event) => {
       render();
     }
 
+    if (action === "create-dashboard-tab") {
+      const values = formValues(form);
+      values.isActive = form.elements.isActive.checked;
+      state.adminState = await api("/api/admin/dashboard-tabs", {
+        method: "POST",
+        body: JSON.stringify(values),
+      });
+      state.selectedAdminDashboardTabId = "";
+      setNotice("Вкладка добавлена");
+      render();
+    }
+
+    if (action === "save-dashboard-tab") {
+      const values = formValues(form);
+      values.isActive = form.elements.isActive.checked;
+      state.adminState = await api(`/api/admin/dashboard-tabs/${form.dataset.tabId}`, {
+        method: "PATCH",
+        body: JSON.stringify(values),
+      });
+      setNotice("Вкладка сохранена");
+      render();
+    }
+
     if (action === "create-dashboard") {
       const values = formValues(form);
       values.isActive = form.elements.isActive.checked;
@@ -636,6 +1144,28 @@ document.addEventListener("submit", async (event) => {
       setNotice("Дашборд сохранен");
       render();
     }
+
+    if (action === "create-etl-script") {
+      const values = formValues(form);
+      values.isActive = form.elements.isActive.checked;
+      state.etlState = await api("/api/admin/etl/scripts", {
+        method: "POST",
+        body: JSON.stringify(values),
+      });
+      setNotice("Загрузка добавлена");
+      render();
+    }
+
+    if (action === "save-etl-script") {
+      const values = formValues(form);
+      values.isActive = form.elements.isActive.checked;
+      state.etlState = await api(`/api/admin/etl/scripts/${form.dataset.scriptId}`, {
+        method: "PATCH",
+        body: JSON.stringify(values),
+      });
+      setNotice("Загрузка сохранена");
+      render();
+    }
   } catch (error) {
     setNotice(error.message, "error");
     render();
@@ -657,12 +1187,23 @@ document.addEventListener("change", (event) => {
     state.filters.category = control.value;
     render();
   }
+
+  if (control.dataset.action === "select-admin-client") {
+    state.selectedAdminClientId = control.value;
+    state.selectedAdminDashboardTabId = "";
+    setNotice(null);
+    render();
+  }
 });
 
 document.addEventListener("keydown", (event) => {
+  const activeTab =
+    state.user?.role === "client" && state.activeClientTab !== "dataLoad"
+      ? clientDashboardTabs().find((tab) => tab.id === state.activeClientTab)
+      : null;
   if (
     state.user?.role !== "client" ||
-    state.activeClientTab !== "salesMetrics" ||
+    !activeTab?.dashboards?.some((dashboard) => dashboard.filtersEnabled) ||
     !["ArrowLeft", "ArrowRight"].includes(event.key)
   ) {
     return;
@@ -691,6 +1232,7 @@ document.addEventListener("click", async (event) => {
       state.user = null;
       state.clientData = null;
       state.adminState = null;
+      state.etlState = null;
       setNotice(null);
       render();
     }
@@ -707,9 +1249,21 @@ document.addEventListener("click", async (event) => {
       render();
     }
 
+    if (action === "select-admin-dashboard-tab") {
+      state.selectedAdminDashboardTabId = button.dataset.tabId;
+      setNotice(null);
+      render();
+    }
+
     if (action === "refresh-admin") {
-      await loadAdminState();
+      await Promise.all([loadAdminState(), loadEtlState()]);
       setNotice("Данные обновлены");
+      render();
+    }
+
+    if (action === "refresh-etl") {
+      await loadEtlState();
+      setNotice("Журнал обновлен");
       render();
     }
 
@@ -726,7 +1280,23 @@ document.addEventListener("click", async (event) => {
         return;
       }
       state.adminState = await api(`/api/admin/clients/${button.dataset.clientId}`, { method: "DELETE" });
+      if (state.selectedAdminClientId === button.dataset.clientId) {
+        state.selectedAdminClientId = "";
+        state.selectedAdminDashboardTabId = "";
+      }
       setNotice("Клиент удален");
+      render();
+    }
+
+    if (action === "delete-dashboard-tab") {
+      if (!confirm("Удалить вкладку и все графики внутри нее?")) {
+        return;
+      }
+      state.adminState = await api(`/api/admin/dashboard-tabs/${button.dataset.tabId}`, { method: "DELETE" });
+      if (state.selectedAdminDashboardTabId === button.dataset.tabId) {
+        state.selectedAdminDashboardTabId = "";
+      }
+      setNotice("Вкладка удалена");
       render();
     }
 
@@ -737,6 +1307,33 @@ document.addEventListener("click", async (event) => {
       state.adminState = await api(`/api/admin/dashboards/${button.dataset.dashboardId}`, { method: "DELETE" });
       setNotice("Дашборд удален");
       render();
+    }
+
+    if (action === "delete-etl-script") {
+      if (!confirm("Удалить настройку загрузки? Журнал запусков останется.")) {
+        return;
+      }
+      state.etlState = await api(`/api/admin/etl/scripts/${button.dataset.scriptId}`, { method: "DELETE" });
+      setNotice("Загрузка удалена");
+      render();
+    }
+
+    if (action === "run-etl") {
+      await api(`/api/etl/scripts/${button.dataset.scriptId}/run`, {
+        method: "POST",
+        body: JSON.stringify({}),
+      });
+      await loadEtlState();
+      setNotice("Загрузка поставлена в очередь");
+      render();
+      window.setTimeout(async () => {
+        try {
+          await loadEtlState();
+          render();
+        } catch {
+          // Ручное обновление останется доступным в интерфейсе.
+        }
+      }, 1200);
     }
   } catch (error) {
     setNotice(error.message, "error");
