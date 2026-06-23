@@ -397,33 +397,8 @@ function renderClientsAdmin() {
     <section class="panel">
       <div class="panel-head">
         <h2>Клиенты</h2>
+        <button class="button button-primary" type="button" data-action="open-create-client-modal">Создать клиента</button>
       </div>
-      <form class="form-grid" data-action="create-client">
-        <div class="field">
-          <label>Название</label>
-          <input name="name" value="Odeon Show" required>
-        </div>
-        <div class="field">
-          <label>Slug</label>
-          <input name="slug" value="odeon-show" autocapitalize="none" required>
-        </div>
-        <div class="field">
-          <label>Логин</label>
-          <input name="username" autocapitalize="none" required>
-        </div>
-        <div class="field">
-          <label>Пароль</label>
-          <div class="password-line">
-            <input id="new-client-password" name="password" autocomplete="new-password" required>
-            <button class="button button-small" type="button" data-action="generate-password" data-target="new-client-password">Сгенерировать</button>
-          </div>
-        </div>
-        <div class="field field-wide">
-          <button class="button button-primary" type="submit">Создать клиента</button>
-        </div>
-      </form>
-    </section>
-    <section class="panel">
       <div class="list">
         ${
           clients.length
@@ -490,8 +465,12 @@ function selectedAdminDashboardTab(client) {
     return null;
   }
 
-  const tab = tabs.find((item) => item.id === state.selectedAdminDashboardTabId) || tabs[0];
-  state.selectedAdminDashboardTabId = tab.id;
+  const tab = tabs.find((item) => item.id === state.selectedAdminDashboardTabId);
+  if (!tab) {
+    state.selectedAdminDashboardTabId = "";
+    return null;
+  }
+
   return tab;
 }
 
@@ -622,6 +601,44 @@ function renderAdminModal() {
     return "";
   }
 
+  if (state.modal.type === "createClient") {
+    return `
+      <div class="modal-backdrop" data-action="close-modal">
+        <section class="modal-panel modal-panel-wide" role="dialog" aria-modal="true" aria-labelledby="create-client-title">
+          <div class="modal-head">
+            <h2 id="create-client-title">Создать клиента</h2>
+            <button class="button button-small" type="button" data-action="close-modal">Закрыть</button>
+          </div>
+          <form class="form-grid" data-action="create-client">
+            <div class="field">
+              <label>Название</label>
+              <input name="name" value="Odeon Show" required autofocus>
+            </div>
+            <div class="field">
+              <label>Slug</label>
+              <input name="slug" value="odeon-show" autocapitalize="none" required>
+            </div>
+            <div class="field">
+              <label>Логин</label>
+              <input name="username" autocapitalize="none" required>
+            </div>
+            <div class="field">
+              <label>Пароль</label>
+              <div class="password-line">
+                <input id="new-client-password" name="password" autocomplete="new-password" required>
+                <button class="button button-small" type="button" data-action="generate-password" data-target="new-client-password">Сгенерировать</button>
+              </div>
+            </div>
+            <div class="modal-actions">
+              <button class="button" type="button" data-action="close-modal">Отмена</button>
+              <button class="button button-primary" type="submit">Создать клиента</button>
+            </div>
+          </form>
+        </section>
+      </div>
+    `;
+  }
+
   if (state.modal.type === "createTab") {
     const client = adminClients().find((item) => item.id === state.modal.clientId);
     if (!client) {
@@ -746,6 +763,7 @@ document.addEventListener("submit", async (event) => {
         method: "POST",
         body: JSON.stringify(values),
       });
+      state.modal = null;
       setNotice("Клиент создан");
       render();
     }
@@ -771,9 +789,7 @@ document.addEventListener("submit", async (event) => {
         method: "POST",
         body: JSON.stringify(values),
       });
-      const client = adminClients().find((item) => item.id === values.clientId);
-      const createdTab = client?.tabs?.find((tab) => tab.title === values.title);
-      state.selectedAdminDashboardTabId = createdTab?.id || "";
+      state.selectedAdminDashboardTabId = "";
       state.modal = null;
       setNotice("Вкладка добавлена");
       render();
@@ -882,6 +898,15 @@ document.addEventListener("click", async (event) => {
       return;
     }
 
+    if (action === "open-create-client-modal") {
+      state.modal = {
+        type: "createClient",
+      };
+      setNotice(null);
+      render();
+      return;
+    }
+
     if (action === "open-create-dashboard-tab-modal") {
       state.modal = {
         type: "createTab",
@@ -925,7 +950,7 @@ document.addEventListener("click", async (event) => {
     }
 
     if (action === "select-admin-dashboard-tab") {
-      state.selectedAdminDashboardTabId = button.dataset.tabId;
+      state.selectedAdminDashboardTabId = state.selectedAdminDashboardTabId === button.dataset.tabId ? "" : button.dataset.tabId;
       setNotice(null);
       render();
     }
