@@ -69,6 +69,7 @@ button {
   font-weight: 800;
   letter-spacing: 0.28em;
   text-transform: uppercase;
+  user-select: none;
 }
 
 .brand-logo {
@@ -78,6 +79,8 @@ button {
   display: block;
   object-fit: contain;
   object-position: left center;
+  user-select: none;
+  -webkit-user-drag: none;
 }
 
 .login-panel {
@@ -278,6 +281,7 @@ a:focus-visible {
   text-overflow: ellipsis;
   white-space: nowrap;
   font-size: clamp(20px, 3vw, 30px);
+  user-select: none;
 }
 
 .topbar-meta {
