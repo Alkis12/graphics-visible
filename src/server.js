@@ -24,11 +24,33 @@ const publicDir = path.resolve(__dirname, "..", "public");
 
 const app = express();
 
+const DEFAULT_CLIENT_DESIGN = {
+  brandText: "Odeon",
+  logoDataUrl: "",
+  colors: {
+    background: "#000000",
+    surface: "#111111",
+    surfaceSoft: "#1c1c1c",
+    surfaceStrong: "#252525",
+    text: "#ffffff",
+    mutedText: "#adadad",
+    primary: "#e8cd7d",
+    primaryStrong: "#eba611",
+    primaryText: "#111111",
+    border: "#343434",
+    frameBackground: "#151515",
+  },
+};
+
+const DESIGN_COLOR_KEYS = Object.keys(DEFAULT_CLIENT_DESIGN.colors);
+const HEX_COLOR_RE = /^#[0-9a-f]{6}$/i;
+const LOGO_DATA_URL_RE = /^data:image\/(?:png|jpe?g|webp|gif|svg\+xml);base64,[a-z0-9+/=]+$/i;
+
 if (config.trustProxy) {
   app.set("trust proxy", 1);
 }
 
-app.use(express.json({ limit: "256kb" }));
+app.use(express.json({ limit: "2mb" }));
 app.use(
   session({
     name: "graphics_visible_sid",
@@ -81,11 +103,66 @@ function publicUser(user, client = null) {
   };
 }
 
+function normalizeHexColor(value, fallback) {
+  const color = cleanString(value || fallback).toLowerCase();
+  return HEX_COLOR_RE.test(color) ? color : fallback;
+}
+
+function serializeDesign(design = {}) {
+  const savedColors = design.colors || {};
+  return {
+    brandText: cleanString(design.brandText) || DEFAULT_CLIENT_DESIGN.brandText,
+    logoDataUrl: cleanString(design.logoDataUrl),
+    colors: DESIGN_COLOR_KEYS.reduce(
+      (acc, key) => ({
+        ...acc,
+        [key]: normalizeHexColor(savedColors[key], DEFAULT_CLIENT_DESIGN.colors[key]),
+      }),
+      {},
+    ),
+  };
+}
+
+function normalizeDesignInput(body = {}) {
+  const design = serializeDesign(body);
+  const logoDataUrl = cleanString(body.logoDataUrl);
+
+  if (logoDataUrl && logoDataUrl.length > 1_200_000) {
+    const error = new Error("Лого слишком большое, загрузите файл до 900 КБ");
+    error.status = 400;
+    throw error;
+  }
+
+  if (logoDataUrl && !LOGO_DATA_URL_RE.test(logoDataUrl)) {
+    const error = new Error("Лого должно быть картинкой png, jpg, webp, gif или svg");
+    error.status = 400;
+    throw error;
+  }
+
+  design.logoDataUrl = logoDataUrl;
+  design.brandText = cleanString(body.brandText) || DEFAULT_CLIENT_DESIGN.brandText;
+
+  if (body.colors) {
+    for (const key of DESIGN_COLOR_KEYS) {
+      const color = cleanString(body.colors[key]);
+      if (!HEX_COLOR_RE.test(color)) {
+        const error = new Error("Цвета должны быть в формате #RRGGBB");
+        error.status = 400;
+        throw error;
+      }
+      design.colors[key] = color.toLowerCase();
+    }
+  }
+
+  return design;
+}
+
 function serializeClient(client, user = null, tabs = []) {
   return {
     id: String(client._id),
     name: client.name,
     slug: client.slug,
+    design: serializeDesign(client.design),
     isActive: client.isActive !== false,
     createdAt: client.createdAt,
     updatedAt: client.updatedAt,
@@ -424,6 +501,7 @@ app.post(
     const clientResult = await db.collection("clients").insertOne({
       name,
       slug,
+      design: serializeDesign(),
       isActive: toBoolean(req.body.isActive, true),
       createdAt: now,
       updatedAt: now,
@@ -527,6 +605,33 @@ app.patch(
         },
         { upsert: true },
       );
+    }
+
+    res.json(await buildAdminState(db));
+  }),
+);
+
+app.patch(
+  "/api/admin/clients/:id/design",
+  requireAdmin,
+  asyncHandler(async (req, res) => {
+    const db = await getDb();
+    const clientId = objectIdFromParam(req.params.id);
+    const design = normalizeDesignInput(req.body);
+
+    const result = await db.collection("clients").updateOne(
+      { _id: clientId },
+      {
+        $set: {
+          design,
+          updatedAt: new Date(),
+        },
+      },
+    );
+
+    if (!result.matchedCount) {
+      res.status(404).json({ error: "Клиент не найден" });
+      return;
     }
 
     res.json(await buildAdminState(db));

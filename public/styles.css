@@ -1,20 +1,25 @@
 :root {
-  color-scheme: dark;
-  --bg: #000000;
-  --panel: #111111;
-  --panel-soft: #1c1c1c;
-  --panel-strong: #252525;
-  --line: rgba(255, 255, 255, 0.12);
-  --line-strong: rgba(232, 205, 125, 0.34);
-  --text: #ffffff;
-  --muted: rgba(255, 255, 255, 0.68);
-  --muted-strong: rgba(255, 255, 255, 0.82);
-  --gold: #e8cd7d;
-  --gold-strong: #eba611;
-  --danger: #ff8f8f;
-  --success: #86e7b0;
+  color-scheme: light;
+  --bg: #f7f7f7;
+  --panel: #ffffff;
+  --panel-soft: #dee8f7;
+  --panel-strong: #062860;
+  --line: rgba(6, 40, 96, 0.16);
+  --line-strong: rgba(4, 53, 119, 0.42);
+  --text: #062860;
+  --muted: #5a6680;
+  --muted-strong: #043577;
+  --gold: #043577;
+  --gold-strong: #062860;
+  --primary-text: #ffffff;
+  --danger: #c73f4b;
+  --success: #14865d;
+  --input-bg: #ffffff;
+  --button-bg: #ffffff;
+  --button-text: #062860;
+  --frame-bg: #f7f7f7;
   --radius: 8px;
-  --shadow: 0 18px 46px rgba(0, 0, 0, 0.28);
+  --shadow: 0 18px 46px rgba(6, 40, 96, 0.14);
 }
 
 * {
@@ -66,6 +71,15 @@ button {
   text-transform: uppercase;
 }
 
+.brand-logo {
+  width: auto;
+  max-width: 180px;
+  height: 32px;
+  display: block;
+  object-fit: contain;
+  object-position: left center;
+}
+
 .login-panel {
   width: min(100%, 380px);
   display: grid;
@@ -73,7 +87,7 @@ button {
   padding: 28px;
   border: 1px solid var(--line);
   border-radius: var(--radius);
-  background: rgba(17, 17, 17, 0.96);
+  background: color-mix(in srgb, var(--panel) 96%, transparent);
   box-shadow: var(--shadow);
 }
 
@@ -161,7 +175,7 @@ textarea {
   border: 1px solid var(--line);
   border-radius: var(--radius);
   outline: none;
-  background: #0a0a0a;
+  background: var(--input-bg);
   color: var(--text);
 }
 
@@ -176,7 +190,7 @@ textarea:focus,
 button:focus-visible,
 a:focus-visible {
   border-color: var(--gold-strong);
-  box-shadow: 0 0 0 3px rgba(235, 166, 17, 0.16);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--gold) 18%, transparent);
   outline: none;
 }
 
@@ -190,8 +204,8 @@ a:focus-visible {
   padding: 0 14px;
   border: 1px solid var(--line);
   border-radius: var(--radius);
-  background: var(--panel-strong);
-  color: var(--text);
+  background: var(--button-bg);
+  color: var(--button-text);
   text-decoration: none;
   font-weight: 700;
   white-space: nowrap;
@@ -199,14 +213,14 @@ a:focus-visible {
 
 .button:hover,
 .link-button:hover {
-  border-color: rgba(232, 205, 125, 0.42);
-  background: #2f2f2f;
+  border-color: var(--line-strong);
+  background: color-mix(in srgb, var(--button-bg) 84%, var(--gold));
 }
 
 .button-primary {
   border-color: transparent;
   background: var(--gold);
-  color: #111111;
+  color: var(--primary-text);
 }
 
 .button-primary:hover {
@@ -249,7 +263,7 @@ a:focus-visible {
   align-items: center;
   padding: 14px clamp(14px, 2.6vw, 30px);
   border-bottom: 1px solid var(--line);
-  background: rgba(0, 0, 0, 0.92);
+  background: color-mix(in srgb, var(--bg) 92%, transparent);
   backdrop-filter: blur(18px);
 }
 
@@ -306,6 +320,8 @@ a:focus-visible {
   min-height: 100vh;
   display: grid;
   grid-template-rows: auto minmax(0, 1fr);
+  background: var(--bg);
+  color: var(--text);
 }
 
 .dashboard-workspace {
@@ -319,7 +335,7 @@ a:focus-visible {
   padding: 12px clamp(14px, 2.6vw, 30px);
   overflow-x: auto;
   border-bottom: 1px solid var(--line);
-  background: #050505;
+  background: color-mix(in srgb, var(--bg) 94%, var(--panel-soft));
 }
 
 .tab {
@@ -335,7 +351,7 @@ a:focus-visible {
 
 .tab.is-active {
   border-color: var(--line-strong);
-  background: rgba(232, 205, 125, 0.12);
+  background: color-mix(in srgb, var(--gold) 12%, transparent);
   color: var(--text);
 }
 
@@ -346,7 +362,7 @@ a:focus-visible {
   align-items: start;
   padding: 12px clamp(14px, 2.6vw, 30px);
   border-bottom: 1px solid var(--line);
-  background: #080808;
+  background: color-mix(in srgb, var(--bg) 92%, var(--panel));
 }
 
 .client-filters select {
@@ -360,7 +376,7 @@ a:focus-visible {
   border: 1px solid var(--line);
   border-radius: var(--radius);
   overflow: hidden;
-  background: #151515;
+  background: var(--frame-bg);
 }
 
 .dashboard-frame {
@@ -368,7 +384,7 @@ a:focus-visible {
   width: 100%;
   height: 100%;
   border: 0;
-  background: #151515;
+  background: var(--frame-bg);
 }
 
 .dashboard-stack {
@@ -441,7 +457,7 @@ a:focus-visible {
   padding: 18px;
   border: 1px solid var(--line);
   border-radius: var(--radius);
-  background: rgba(17, 17, 17, 0.96);
+  background: color-mix(in srgb, var(--panel) 96%, transparent);
 }
 
 .panel + .panel {
@@ -528,6 +544,55 @@ a:focus-visible {
   max-width: 420px;
 }
 
+.design-form {
+  align-items: end;
+}
+
+.design-preview {
+  min-height: 150px;
+  grid-column: 1 / -1;
+  display: grid;
+  gap: 18px;
+  padding: 18px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--bg);
+  color: var(--text);
+}
+
+.design-preview-top,
+.design-preview-body {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.design-preview-body {
+  padding: 14px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--panel);
+}
+
+.design-colors {
+  grid-column: 1 / -1;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.color-line {
+  display: grid;
+  grid-template-columns: 52px minmax(0, 1fr);
+  gap: 8px;
+}
+
+.color-input {
+  min-height: 44px;
+  padding: 4px;
+}
+
 .empty-state.compact {
   min-height: 120px;
 }
@@ -536,7 +601,7 @@ a:focus-visible {
   border: 1px solid var(--line);
   border-radius: var(--radius);
   overflow: hidden;
-  background: #0b0b0b;
+  background: color-mix(in srgb, var(--panel) 96%, var(--bg));
 }
 
 .dashboard-tab-toggle {
@@ -557,7 +622,7 @@ a:focus-visible {
 
 .dashboard-tab-item.is-open .dashboard-tab-toggle {
   border-bottom: 1px solid var(--line);
-  background: rgba(232, 205, 125, 0.08);
+  background: color-mix(in srgb, var(--gold) 9%, transparent);
 }
 
 .dashboard-tab-body {
@@ -621,6 +686,7 @@ a:focus-visible {
   .client-row-grid,
   .dashboard-row-grid,
   .dashboard-tab-row-grid,
+  .design-colors,
   .client-filters {
     grid-template-columns: 1fr;
   }

@@ -31,6 +31,36 @@ const FILTER_CATEGORIES = [
   "Партер 3 Общая",
 ];
 const FILTER_EVENTS = buildEventOptions("2026-05-28", "2026-07-31");
+const DEFAULT_CLIENT_DESIGN = {
+  brandText: "Odeon",
+  logoDataUrl: "",
+  colors: {
+    background: "#000000",
+    surface: "#111111",
+    surfaceSoft: "#1c1c1c",
+    surfaceStrong: "#252525",
+    text: "#ffffff",
+    mutedText: "#adadad",
+    primary: "#e8cd7d",
+    primaryStrong: "#eba611",
+    primaryText: "#111111",
+    border: "#343434",
+    frameBackground: "#151515",
+  },
+};
+const DESIGN_COLOR_FIELDS = [
+  ["background", "Фон страницы"],
+  ["surface", "Основные панели"],
+  ["surfaceSoft", "Мягкие панели"],
+  ["surfaceStrong", "Кнопки и активные зоны"],
+  ["text", "Основной текст"],
+  ["mutedText", "Вторичный текст"],
+  ["primary", "Акцент"],
+  ["primaryStrong", "Акцент при наведении"],
+  ["primaryText", "Текст на акценте"],
+  ["border", "Границы"],
+  ["frameBackground", "Фон графиков"],
+];
 
 function buildEventOptions(startDate, endDate) {
   const options = [];
@@ -61,6 +91,53 @@ function escapeHtml(value) {
 
 function checked(value) {
   return value ? "checked" : "";
+}
+
+function mergeDesign(design = {}) {
+  return {
+    brandText: design.brandText || DEFAULT_CLIENT_DESIGN.brandText,
+    logoDataUrl: design.logoDataUrl || "",
+    colors: DESIGN_COLOR_FIELDS.reduce(
+      (acc, [key]) => ({
+        ...acc,
+        [key]: design.colors?.[key] || DEFAULT_CLIENT_DESIGN.colors[key],
+      }),
+      {},
+    ),
+  };
+}
+
+function designStyle(design) {
+  const colors = mergeDesign(design).colors;
+  return [
+    `--bg: ${colors.background}`,
+    `--panel: ${colors.surface}`,
+    `--panel-soft: ${colors.surfaceSoft}`,
+    `--panel-strong: ${colors.surfaceStrong}`,
+    `--text: ${colors.text}`,
+    `--muted: ${colors.mutedText}`,
+    `--muted-strong: ${colors.mutedText}`,
+    `--gold: ${colors.primary}`,
+    `--gold-strong: ${colors.primaryStrong}`,
+    `--primary-text: ${colors.primaryText}`,
+    `--line: ${colors.border}`,
+    `--line-strong: ${colors.primary}`,
+    `--input-bg: ${colors.surface}`,
+    `--button-bg: ${colors.surfaceStrong}`,
+    `--button-text: ${colors.text}`,
+    `--frame-bg: ${colors.frameBackground}`,
+  ].join("; ");
+}
+
+function renderBrandMark(design, fallbackText = "Odeon") {
+  const normalized = mergeDesign(design);
+  const brandText = normalized.brandText || fallbackText;
+
+  if (normalized.logoDataUrl) {
+    return `<img class="brand-logo" src="${escapeHtml(normalized.logoDataUrl)}" alt="${escapeHtml(brandText)}">`;
+  }
+
+  return `<div class="brand-word">${escapeHtml(brandText)}</div>`;
 }
 
 function dateFromKey(value) {
@@ -163,6 +240,17 @@ function formValues(form) {
   return Object.fromEntries(new FormData(form).entries());
 }
 
+function designValues(form) {
+  return {
+    brandText: form.elements.brandText.value,
+    logoDataUrl: form.elements.logoDataUrl.value,
+    colors: DESIGN_COLOR_FIELDS.reduce((acc, [key]) => {
+      acc[key] = form.elements[`colorText_${key}`].value || form.elements[`color_${key}`].value;
+      return acc;
+    }, {}),
+  };
+}
+
 function generatePassword(length = 18) {
   const values = new Uint32Array(length);
   crypto.getRandomValues(values);
@@ -212,7 +300,7 @@ function renderLogin() {
     <section class="login-view">
       <form class="login-panel" data-action="login">
         <div class="login-title">
-          <div class="brand-word">Odeon</div>
+          <div class="brand-word">Planetra</div>
           <h1>Dashboards</h1>
         </div>
         <div class="form">
@@ -253,13 +341,14 @@ function renderClient() {
   const activeTab = activeDashboardTab();
   const dashboards = activeTab?.dashboards || [];
   const clientName = state.clientData?.client?.name || state.user.clientName || "Client";
+  const design = mergeDesign(state.clientData?.client?.design);
   const hasFilters = dashboards.some((dashboard) => dashboard.filtersEnabled);
 
   app.innerHTML = `
-    <section class="client-shell">
+    <section class="client-shell" style="${escapeHtml(designStyle(design))}">
       <header class="topbar client-topbar">
         <div class="topbar-title">
-          <div class="brand-word">Odeon</div>
+          ${renderBrandMark(design, clientName)}
           <h1>${escapeHtml(clientName)}</h1>
         </div>
         ${hasFilters ? renderClientFilters() : '<div></div>'}
@@ -368,7 +457,7 @@ function renderAdmin() {
     <section class="admin-shell">
       <header class="topbar">
         <div class="topbar-title">
-          <div class="brand-word">Odeon</div>
+          <div class="brand-word">Planetra</div>
           <h1>Админ-панель</h1>
           <div class="topbar-meta">${escapeHtml(state.user.username)}</div>
         </div>
@@ -381,9 +470,12 @@ function renderAdmin() {
         <nav class="admin-nav" aria-label="Разделы админ-панели">
           <button class="tab ${state.activeAdminTab === "clients" ? "is-active" : ""}" type="button" data-action="admin-tab" data-tab="clients">Клиенты</button>
           <button class="tab ${state.activeAdminTab === "dashboards" ? "is-active" : ""}" type="button" data-action="admin-tab" data-tab="dashboards">Дашборды</button>
+          <button class="tab ${state.activeAdminTab === "design" ? "is-active" : ""}" type="button" data-action="admin-tab" data-tab="design">Дизайн</button>
         </nav>
         ${noticeHtml()}
-        ${state.activeAdminTab === "clients" ? renderClientsAdmin() : renderDashboardsAdmin()}
+        ${state.activeAdminTab === "clients" ? renderClientsAdmin() : ""}
+        ${state.activeAdminTab === "dashboards" ? renderDashboardsAdmin() : ""}
+        ${state.activeAdminTab === "design" ? renderDesignAdmin() : ""}
       </section>
       ${renderAdminModal()}
     </section>
@@ -438,6 +530,83 @@ function renderClientRow(client) {
         <button class="button button-small button-danger" type="button" data-action="delete-client" data-client-id="${escapeHtml(client.id)}">Удалить</button>
       </div>
     </form>
+  `;
+}
+
+function renderDesignAdmin() {
+  const clients = adminClients();
+  const client = selectedAdminClient();
+  const design = mergeDesign(client?.design);
+
+  return `
+    <section class="panel">
+      <div class="panel-head">
+        <h2>Дизайн</h2>
+      </div>
+      <div class="admin-client-picker">
+        <div class="field">
+          <label>Клиент</label>
+          <select data-action="select-admin-client">
+            ${clients
+              .map(
+                (item) => `<option value="${escapeHtml(item.id)}" ${item.id === client?.id ? "selected" : ""}>${escapeHtml(item.name)}</option>`,
+              )
+              .join("")}
+          </select>
+        </div>
+      </div>
+    </section>
+    ${
+      client
+        ? `
+          <section class="panel">
+            <form class="form-grid design-form" data-action="save-client-design" data-client-id="${escapeHtml(client.id)}">
+              <input name="logoDataUrl" type="hidden" value="${escapeHtml(design.logoDataUrl)}">
+              <div class="design-preview" style="${escapeHtml(designStyle(design))}">
+                <div class="design-preview-top">
+                  ${renderBrandMark(design, client.name)}
+                  <strong>${escapeHtml(client.name)}</strong>
+                </div>
+                <div class="design-preview-body">
+                  <span>Вкладка</span>
+                  <button class="button button-primary" type="button">Кнопка</button>
+                </div>
+              </div>
+              <div class="field">
+                <label>Текст бренда без лого</label>
+                <input name="brandText" value="${escapeHtml(design.brandText)}">
+              </div>
+              <div class="field">
+                <label>Лого клиента</label>
+                <input type="file" accept="image/png,image/jpeg,image/webp,image/gif,image/svg+xml" data-action="logo-upload">
+              </div>
+              <div class="field">
+                <label>Лого</label>
+                <button class="button" type="button" data-action="clear-logo">Убрать лого</button>
+              </div>
+              <div class="design-colors">
+                ${DESIGN_COLOR_FIELDS.map(([key, label]) => renderColorField(key, label, design.colors[key])).join("")}
+              </div>
+              <div class="modal-actions">
+                <button class="button button-primary" type="submit">Сохранить дизайн</button>
+              </div>
+            </form>
+          </section>
+        `
+        : '<section class="panel"><div class="empty-state compact">Сначала создайте клиента</div></section>'
+    }
+  `;
+}
+
+function renderColorField(key, label, value) {
+  return `
+    <div class="field color-field">
+      <label>${escapeHtml(label)}</label>
+      <div class="color-line">
+        <input class="color-input" name="color_${escapeHtml(key)}" type="color" value="${escapeHtml(value)}">
+        <input name="colorText_${escapeHtml(key)}" value="${escapeHtml(value)}" pattern="#[0-9a-fA-F]{6}">
+      </div>
+    </div>
   `;
 }
 
@@ -831,6 +1000,15 @@ document.addEventListener("submit", async (event) => {
       render();
     }
 
+    if (action === "save-client-design") {
+      state.adminState = await api(`/api/admin/clients/${form.dataset.clientId}/design`, {
+        method: "PATCH",
+        body: JSON.stringify(designValues(form)),
+      });
+      setNotice("Дизайн сохранен");
+      render();
+    }
+
   } catch (error) {
     setNotice(error.message, "error");
     render();
@@ -858,6 +1036,46 @@ document.addEventListener("change", (event) => {
     state.selectedAdminDashboardTabId = "";
     setNotice(null);
     render();
+  }
+
+  if (control.dataset.action === "logo-upload") {
+    const file = control.files?.[0];
+    if (!file) {
+      return;
+    }
+
+    if (file.size > 900 * 1024) {
+      setNotice("Лого должно быть до 900 КБ", "error");
+      control.value = "";
+      render();
+      return;
+    }
+
+    const reader = new FileReader();
+    reader.addEventListener("load", () => {
+      const form = control.closest("form");
+      const logoInput = form?.elements.logoDataUrl;
+      const previewTop = form?.querySelector(".design-preview-top");
+      if (!form || !logoInput || !previewTop) {
+        return;
+      }
+
+      logoInput.value = reader.result;
+      const currentLogo = previewTop.querySelector(".brand-logo, .brand-word");
+      currentLogo?.remove();
+      previewTop.insertAdjacentHTML(
+        "afterbegin",
+        `<img class="brand-logo" src="${escapeHtml(reader.result)}" alt="${escapeHtml(form.elements.brandText.value || "Logo")}">`,
+      );
+    });
+    reader.readAsDataURL(file);
+  }
+
+  if (control.classList.contains("color-input")) {
+    const textInput = control.closest(".color-line")?.querySelector('input[type="text"], input:not([type="color"])');
+    if (textInput) {
+      textInput.value = control.value;
+    }
   }
 });
 
@@ -967,6 +1185,19 @@ document.addEventListener("click", async (event) => {
         input.value = generatePassword();
         input.focus();
       }
+    }
+
+    if (action === "clear-logo") {
+      const form = button.closest("form");
+      const logoInput = form?.elements.logoDataUrl;
+      const previewTop = form?.querySelector(".design-preview-top");
+      if (form && logoInput && previewTop) {
+        logoInput.value = "";
+        form.querySelector('input[data-action="logo-upload"]').value = "";
+        previewTop.querySelector(".brand-logo, .brand-word")?.remove();
+        previewTop.insertAdjacentHTML("afterbegin", `<div class="brand-word">${escapeHtml(form.elements.brandText.value || "Odeon")}</div>`);
+      }
+      return;
     }
 
     if (action === "delete-client") {
