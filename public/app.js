@@ -346,12 +346,12 @@ function renderClient() {
 
   app.innerHTML = `
     <section class="client-shell" style="${escapeHtml(designStyle(design))}">
-      <header class="topbar client-topbar">
+      <header class="topbar client-topbar ${hasFilters ? "has-filters" : "no-filters"}">
         <div class="topbar-title">
           ${renderBrandMark(design, clientName)}
           <h1>${escapeHtml(clientName)}</h1>
         </div>
-        ${hasFilters ? renderClientFilters() : '<div></div>'}
+        <div class="client-filter-slot">${hasFilters ? renderClientFilters() : ""}</div>
         <div class="topbar-actions">
           <button class="button" type="button" data-action="logout">Выйти</button>
           <div class="topbar-meta">${escapeHtml(state.user.username)}</div>

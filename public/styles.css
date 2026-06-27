@@ -302,6 +302,15 @@ a:focus-visible {
   align-items: center;
 }
 
+.client-topbar.no-filters {
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: start;
+}
+
+.client-topbar.no-filters .client-filter-slot {
+  display: none;
+}
+
 .client-topbar .client-filters {
   width: 100%;
   padding: 0;
