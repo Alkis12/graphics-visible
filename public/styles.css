@@ -72,6 +72,24 @@ button {
   user-select: none;
 }
 
+.planetra-mark {
+  min-width: 0;
+  display: inline-flex;
+  gap: 9px;
+  align-items: center;
+  color: var(--gold);
+  user-select: none;
+}
+
+.planetra-logo {
+  width: 30px;
+  height: 30px;
+  display: block;
+  object-fit: contain;
+  user-select: none;
+  -webkit-user-drag: none;
+}
+
 .brand-logo {
   width: auto;
   max-width: 180px;

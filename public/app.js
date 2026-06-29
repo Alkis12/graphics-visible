@@ -31,8 +31,9 @@ const FILTER_CATEGORIES = [
   "Партер 3 Общая",
 ];
 const FILTER_EVENTS = buildEventOptions("2026-05-28", "2026-07-31");
+const PLANETRA_LOGO_SRC = "/assets/planetra.png";
 const DEFAULT_CLIENT_DESIGN = {
-  brandText: "Odeon",
+  brandText: "Одеон",
   logoDataUrl: "",
   colors: {
     background: "#000000",
@@ -94,8 +95,10 @@ function checked(value) {
 }
 
 function mergeDesign(design = {}) {
+  const brandText = design.brandText || DEFAULT_CLIENT_DESIGN.brandText;
+
   return {
-    brandText: design.brandText || DEFAULT_CLIENT_DESIGN.brandText,
+    brandText: /^odeon$/i.test(brandText) ? "Одеон" : brandText,
     logoDataUrl: design.logoDataUrl || "",
     colors: DESIGN_COLOR_FIELDS.reduce(
       (acc, [key]) => ({
@@ -129,7 +132,16 @@ function designStyle(design) {
   ].join("; ");
 }
 
-function renderBrandMark(design, fallbackText = "Odeon") {
+function renderPlanetraMark() {
+  return `
+    <div class="planetra-mark" aria-label="Planetra">
+      <img class="planetra-logo" src="${PLANETRA_LOGO_SRC}" alt="">
+      <span class="brand-word">Planetra</span>
+    </div>
+  `;
+}
+
+function renderBrandMark(design, fallbackText = "Одеон") {
   const normalized = mergeDesign(design);
   const brandText = normalized.brandText || fallbackText;
 
@@ -138,6 +150,15 @@ function renderBrandMark(design, fallbackText = "Odeon") {
   }
 
   return `<div class="brand-word">${escapeHtml(brandText)}</div>`;
+}
+
+function displayClientName(name) {
+  const value = String(name || "");
+  if (/^odeon\s+show$/i.test(value)) {
+    return "Одеон Шоу";
+  }
+
+  return value.replace(/^odeon\b/i, "Одеон");
 }
 
 function dateFromKey(value) {
@@ -300,7 +321,7 @@ function renderLogin() {
     <section class="login-view">
       <form class="login-panel" data-action="login">
         <div class="login-title">
-          <div class="brand-word">Planetra</div>
+          ${renderPlanetraMark()}
           <h1>Dashboards</h1>
         </div>
         <div class="form">
@@ -340,7 +361,7 @@ function renderClient() {
   const tabs = clientDashboardTabs();
   const activeTab = activeDashboardTab();
   const dashboards = activeTab?.dashboards || [];
-  const clientName = state.clientData?.client?.name || state.user.clientName || "Client";
+  const clientName = displayClientName(state.clientData?.client?.name || state.user.clientName || "Client");
   const design = mergeDesign(state.clientData?.client?.design);
   const hasFilters = dashboards.some((dashboard) => dashboard.filtersEnabled);
 
@@ -457,7 +478,7 @@ function renderAdmin() {
     <section class="admin-shell">
       <header class="topbar">
         <div class="topbar-title">
-          <div class="brand-word">Planetra</div>
+          ${renderPlanetraMark()}
           <h1>Админ-панель</h1>
           <div class="topbar-meta">${escapeHtml(state.user.username)}</div>
         </div>
@@ -1195,7 +1216,7 @@ document.addEventListener("click", async (event) => {
         logoInput.value = "";
         form.querySelector('input[data-action="logo-upload"]').value = "";
         previewTop.querySelector(".brand-logo, .brand-word")?.remove();
-        previewTop.insertAdjacentHTML("afterbegin", `<div class="brand-word">${escapeHtml(form.elements.brandText.value || "Odeon")}</div>`);
+        previewTop.insertAdjacentHTML("afterbegin", `<div class="brand-word">${escapeHtml(form.elements.brandText.value || "Одеон")}</div>`);
       }
       return;
     }

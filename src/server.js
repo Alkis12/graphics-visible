@@ -25,7 +25,7 @@ const publicDir = path.resolve(__dirname, "..", "public");
 const app = express();
 
 const DEFAULT_CLIENT_DESIGN = {
-  brandText: "Odeon",
+  brandText: "Одеон",
   logoDataUrl: "",
   colors: {
     background: "#000000",
@@ -110,8 +110,10 @@ function normalizeHexColor(value, fallback) {
 
 function serializeDesign(design = {}) {
   const savedColors = design.colors || {};
+  const brandText = cleanString(design.brandText);
+
   return {
-    brandText: cleanString(design.brandText) || DEFAULT_CLIENT_DESIGN.brandText,
+    brandText: /^odeon$/i.test(brandText) ? "Одеон" : brandText || DEFAULT_CLIENT_DESIGN.brandText,
     logoDataUrl: cleanString(design.logoDataUrl),
     colors: DESIGN_COLOR_KEYS.reduce(
       (acc, key) => ({
@@ -140,7 +142,8 @@ function normalizeDesignInput(body = {}) {
   }
 
   design.logoDataUrl = logoDataUrl;
-  design.brandText = cleanString(body.brandText) || DEFAULT_CLIENT_DESIGN.brandText;
+  const brandText = cleanString(body.brandText);
+  design.brandText = /^odeon$/i.test(brandText) ? "Одеон" : brandText || DEFAULT_CLIENT_DESIGN.brandText;
 
   if (body.colors) {
     for (const key of DESIGN_COLOR_KEYS) {
