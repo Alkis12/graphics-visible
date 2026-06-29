@@ -154,11 +154,26 @@ function renderBrandMark(design, fallbackText = "Одеон") {
 
 function displayClientName(name) {
   const value = String(name || "");
-  if (/^odeon\s+show$/i.test(value)) {
-    return "Одеон Шоу";
+  if (isOdeonClient(value)) {
+    return "ОДЕОН";
   }
 
   return value.replace(/^odeon\b/i, "Одеон");
+}
+
+function isOdeonClient(name) {
+  return /^(odeon|одеон)\s+(show|шоу)$/i.test(String(name || ""));
+}
+
+function clientHeaderDesign(name, design) {
+  if (!isOdeonClient(name)) {
+    return design;
+  }
+
+  return {
+    ...design,
+    brandText: "Театр",
+  };
 }
 
 function dateFromKey(value) {
@@ -361,15 +376,17 @@ function renderClient() {
   const tabs = clientDashboardTabs();
   const activeTab = activeDashboardTab();
   const dashboards = activeTab?.dashboards || [];
-  const clientName = displayClientName(state.clientData?.client?.name || state.user.clientName || "Client");
+  const rawClientName = state.clientData?.client?.name || state.user.clientName || "Client";
+  const clientName = displayClientName(rawClientName);
   const design = mergeDesign(state.clientData?.client?.design);
+  const headerDesign = clientHeaderDesign(rawClientName, design);
   const hasFilters = dashboards.some((dashboard) => dashboard.filtersEnabled);
 
   app.innerHTML = `
     <section class="client-shell" style="${escapeHtml(`${designStyle(design)}; --client-topbar-height: ${hasFilters ? "114px" : "90px"}`)}">
       <header class="topbar client-topbar ${hasFilters ? "has-filters" : "no-filters"}">
         <div class="topbar-title">
-          ${renderBrandMark(design, clientName)}
+          ${renderBrandMark(headerDesign, clientName)}
           <h1>${escapeHtml(clientName)}</h1>
         </div>
         <div class="client-filter-slot">${hasFilters ? renderClientFilters() : ""}</div>
