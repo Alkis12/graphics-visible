@@ -366,7 +366,7 @@ function renderClient() {
   const hasFilters = dashboards.some((dashboard) => dashboard.filtersEnabled);
 
   app.innerHTML = `
-    <section class="client-shell" style="${escapeHtml(designStyle(design))}">
+    <section class="client-shell" style="${escapeHtml(`${designStyle(design)}; --client-topbar-height: ${hasFilters ? "114px" : "90px"}`)}">
       <header class="topbar client-topbar ${hasFilters ? "has-filters" : "no-filters"}">
         <div class="topbar-title">
           ${renderBrandMark(design, clientName)}
