@@ -315,6 +315,14 @@ a:focus-visible {
   justify-content: flex-end;
 }
 
+.admin-topbar {
+  grid-template-columns: minmax(220px, 0.7fr) minmax(360px, 1fr) minmax(170px, 0.7fr);
+}
+
+.admin-topbar .admin-nav {
+  justify-self: center;
+}
+
 .client-topbar {
   grid-template-columns: minmax(180px, 1fr) minmax(440px, 640px) minmax(120px, 1fr);
   align-items: center;
@@ -499,8 +507,8 @@ a:focus-visible {
 
 .admin-nav {
   display: flex;
+  flex-wrap: wrap;
   gap: 8px;
-  margin-bottom: 16px;
 }
 
 .admin-nav .tab {
@@ -807,6 +815,15 @@ a:focus-visible {
     grid-template-columns: 1fr;
   }
 
+  .admin-topbar {
+    grid-template-columns: 1fr auto;
+  }
+
+  .admin-topbar .admin-nav {
+    grid-column: 1 / -1;
+    justify-self: start;
+  }
+
   .row-actions {
     justify-content: stretch;
   }
@@ -844,6 +861,18 @@ a:focus-visible {
 
   .topbar-actions {
     justify-content: stretch;
+  }
+
+  .admin-topbar {
+    grid-template-columns: 1fr;
+  }
+
+  .admin-topbar .admin-nav {
+    justify-self: stretch;
+  }
+
+  .admin-topbar .admin-nav .tab {
+    flex: 1 1 130px;
   }
 
   .client-topbar .topbar-actions {
