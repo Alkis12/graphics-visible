@@ -499,33 +499,35 @@ function renderAdmin() {
           <h1>Админ-панель</h1>
           <div class="topbar-meta">${escapeHtml(state.user.username)}</div>
         </div>
-        <div class="admin-topbar-controls">
+        <div class="topbar-actions">
+          <button class="button" type="button" data-action="refresh-admin">Обновить</button>
+          <button class="button" type="button" data-action="logout">Выйти</button>
+        </div>
+      </header>
+      <div class="admin-layout">
+        <aside class="admin-sidebar">
           <nav class="admin-nav" aria-label="Разделы админ-панели">
             <button class="tab ${state.activeAdminTab === "clients" ? "is-active" : ""}" type="button" data-action="admin-tab" data-tab="clients">Клиенты</button>
             <button class="tab ${state.activeAdminTab === "dashboards" ? "is-active" : ""}" type="button" data-action="admin-tab" data-tab="dashboards">Дашборды</button>
             <button class="tab ${state.activeAdminTab === "access" ? "is-active" : ""}" type="button" data-action="admin-tab" data-tab="access">Доступы</button>
             <button class="tab ${state.activeAdminTab === "design" ? "is-active" : ""}" type="button" data-action="admin-tab" data-tab="design">Дизайн</button>
           </nav>
-          ${renderAdminTopbarClientPicker()}
-        </div>
-        <div class="topbar-actions">
-          <button class="button" type="button" data-action="refresh-admin">Обновить</button>
-          <button class="button" type="button" data-action="logout">Выйти</button>
-        </div>
-      </header>
-      <section class="admin-workspace">
-        ${noticeHtml()}
-        ${state.activeAdminTab === "clients" ? renderClientsAdmin() : ""}
-        ${state.activeAdminTab === "dashboards" ? renderDashboardsAdmin() : ""}
-        ${state.activeAdminTab === "access" ? renderAccessAdmin() : ""}
-        ${state.activeAdminTab === "design" ? renderDesignAdmin() : ""}
-      </section>
+          ${renderAdminSidebarClientPicker()}
+        </aside>
+        <section class="admin-workspace">
+          ${noticeHtml()}
+          ${state.activeAdminTab === "clients" ? renderClientsAdmin() : ""}
+          ${state.activeAdminTab === "dashboards" ? renderDashboardsAdmin() : ""}
+          ${state.activeAdminTab === "access" ? renderAccessAdmin() : ""}
+          ${state.activeAdminTab === "design" ? renderDesignAdmin() : ""}
+        </section>
+      </div>
       ${renderAdminModal()}
     </section>
   `;
 }
 
-function renderAdminTopbarClientPicker() {
+function renderAdminSidebarClientPicker() {
   if (!["dashboards", "access", "design"].includes(state.activeAdminTab)) {
     return "";
   }

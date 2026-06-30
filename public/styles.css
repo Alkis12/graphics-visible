@@ -316,17 +316,7 @@ a:focus-visible {
 }
 
 .admin-topbar {
-  grid-template-columns: minmax(220px, 0.6fr) minmax(520px, 1fr) minmax(170px, 0.5fr);
-}
-
-.admin-topbar-controls {
-  min-width: 0;
-  display: flex;
-  flex-wrap: wrap;
-  gap: 10px;
-  align-items: center;
-  justify-content: center;
-  justify-self: center;
+  grid-template-columns: minmax(220px, 1fr) auto;
 }
 
 .client-topbar {
@@ -504,21 +494,38 @@ a:focus-visible {
   text-align: center;
 }
 
-.admin-workspace {
+.admin-layout {
   min-width: 0;
-  width: min(100%, 1180px);
+  width: min(100%, 1440px);
   margin: 0 auto;
+  display: grid;
+  grid-template-columns: 250px minmax(0, 1fr);
+  gap: 18px;
   padding: 18px clamp(14px, 2.6vw, 30px) 34px;
 }
 
+.admin-sidebar {
+  position: sticky;
+  top: 98px;
+  align-self: start;
+  display: grid;
+  gap: 14px;
+}
+
+.admin-workspace {
+  min-width: 0;
+  display: grid;
+  gap: 16px;
+}
+
 .admin-nav {
-  display: flex;
-  flex-wrap: wrap;
+  display: grid;
   gap: 8px;
 }
 
 .admin-nav .tab {
-  flex: 0 0 auto;
+  width: 100%;
+  justify-content: flex-start;
 }
 
 .panel {
@@ -626,8 +633,8 @@ a:focus-visible {
 }
 
 .admin-client-picker.compact {
-  width: min(260px, 100%);
-  max-width: 260px;
+  width: 100%;
+  max-width: none;
   display: grid;
   gap: 4px;
 }
@@ -844,9 +851,16 @@ a:focus-visible {
     grid-template-columns: 1fr auto;
   }
 
-  .admin-topbar .admin-topbar-controls {
-    grid-column: 1 / -1;
-    justify-self: start;
+  .admin-layout {
+    grid-template-columns: 1fr;
+  }
+
+  .admin-sidebar {
+    position: static;
+  }
+
+  .admin-nav {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
   }
 
   .row-actions {
@@ -892,12 +906,8 @@ a:focus-visible {
     grid-template-columns: 1fr;
   }
 
-  .admin-topbar .admin-topbar-controls {
-    justify-self: stretch;
-  }
-
-  .admin-topbar .admin-nav .tab {
-    flex: 1 1 130px;
+  .admin-nav {
+    grid-template-columns: 1fr 1fr;
   }
 
   .admin-client-picker.compact {
