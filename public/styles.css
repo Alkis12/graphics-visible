@@ -509,6 +509,7 @@ a:focus-visible {
   margin: 0 auto;
   display: grid;
   gap: 16px;
+  align-content: start;
   padding: 18px clamp(14px, 2.6vw, 30px) 34px;
 }
 
@@ -526,6 +527,8 @@ a:focus-visible {
 .panel {
   display: grid;
   gap: 16px;
+  align-self: start;
+  align-content: start;
   padding: 18px;
   border: 1px solid var(--line);
   border-radius: var(--radius);
@@ -546,6 +549,19 @@ a:focus-visible {
 .list {
   display: grid;
   gap: 10px;
+  align-content: start;
+}
+
+.client-card {
+  display: grid;
+  gap: 12px;
+  padding-top: 12px;
+  border-top: 1px solid var(--line);
+}
+
+.client-card:first-child {
+  padding-top: 0;
+  border-top: 0;
 }
 
 .row-form,
@@ -564,6 +580,64 @@ a:focus-visible {
 
 .client-row-grid {
   grid-template-columns: minmax(160px, 1fr) minmax(120px, 0.7fr) minmax(140px, 0.8fr) minmax(140px, 0.8fr) 86px auto;
+}
+
+.client-card .row-form {
+  padding-top: 0;
+  border-top: 0;
+}
+
+.client-card-summary {
+  display: grid;
+  gap: 8px;
+  padding: 12px;
+  border: 1px solid color-mix(in srgb, var(--line) 70%, transparent);
+  border-radius: var(--radius);
+  background: color-mix(in srgb, var(--panel-soft) 52%, var(--panel));
+}
+
+.summary-line {
+  display: grid;
+  grid-template-columns: 86px minmax(0, 1fr);
+  gap: 10px;
+  align-items: start;
+}
+
+.summary-label {
+  color: var(--muted-strong);
+  font-size: 12px;
+  font-weight: 800;
+  line-height: 1.8;
+  text-transform: uppercase;
+}
+
+.summary-chips,
+.dashboard-tab-chips {
+  min-width: 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.summary-chip {
+  max-width: 260px;
+  min-height: 26px;
+  display: inline-flex;
+  align-items: center;
+  padding: 4px 9px;
+  border: 1px solid color-mix(in srgb, var(--line) 80%, transparent);
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--panel) 88%, var(--panel-soft));
+  color: var(--text);
+  font-size: 12px;
+  font-weight: 700;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.muted-chip {
+  color: var(--muted);
 }
 
 .dashboard-row-grid {
@@ -711,18 +785,30 @@ a:focus-visible {
 
 .dashboard-tab-toggle {
   width: 100%;
-  min-height: 56px;
+  min-height: 64px;
   display: flex;
   gap: 12px;
   align-items: center;
   justify-content: space-between;
-  padding: 0 14px;
+  padding: 12px 14px;
   border: 0;
   border-radius: 0;
   background: transparent;
   color: var(--text);
   font-weight: 800;
   text-align: left;
+}
+
+.dashboard-tab-main {
+  min-width: 0;
+  display: grid;
+  gap: 7px;
+}
+
+.dashboard-tab-main strong {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .dashboard-tab-item.is-open .dashboard-tab-toggle {
@@ -832,6 +918,7 @@ a:focus-visible {
 @media (max-width: 980px) {
   .form-grid,
   .client-row-grid,
+  .summary-line,
   .dashboard-row-grid,
   .dashboard-tab-row-grid,
   .access-row-grid,
@@ -861,6 +948,11 @@ a:focus-visible {
 
   .row-actions .button {
     flex: 1;
+  }
+
+  .dashboard-tab-toggle {
+    align-items: flex-start;
+    flex-direction: column;
   }
 }
 
@@ -921,6 +1013,10 @@ a:focus-visible {
   .login-panel,
   .panel {
     padding: 16px;
+  }
+
+  .summary-chip {
+    max-width: 100%;
   }
 
   .password-line {

@@ -571,35 +571,68 @@ function renderClientsAdmin() {
 }
 
 function renderClientRow(client) {
+  const users = client.users || [];
+  const tabs = client.tabs || [];
+  const dashboards = clientDashboards(client);
+
   return `
-    <form class="row-form row-grid client-row-grid" data-action="save-client" data-client-id="${escapeHtml(client.id)}">
-      <input name="userId" type="hidden" value="${escapeHtml(client.user?.id || "")}">
-      <div class="field">
-        <label>Название</label>
-        <input name="name" value="${escapeHtml(client.name)}" required>
+    <article class="client-card">
+      <form class="row-form row-grid client-row-grid" data-action="save-client" data-client-id="${escapeHtml(client.id)}">
+        <input name="userId" type="hidden" value="${escapeHtml(client.user?.id || "")}">
+        <div class="field">
+          <label>Название</label>
+          <input name="name" value="${escapeHtml(client.name)}" required>
+        </div>
+        <div class="field">
+          <label>Slug</label>
+          <input name="slug" value="${escapeHtml(client.slug)}" autocapitalize="none" required>
+        </div>
+        <div class="field">
+          <label>Логин</label>
+          <input name="username" value="${escapeHtml(client.user?.username || "")}" autocapitalize="none" required>
+        </div>
+        <div class="field">
+          <label>Новый пароль</label>
+          <input name="password" autocomplete="new-password" placeholder="Без изменений">
+        </div>
+        <label class="checkbox-field">
+          <input name="isActive" type="checkbox" ${checked(client.isActive && client.user?.isActive !== false)}>
+          Активен
+        </label>
+        <div class="row-actions">
+          <button class="button button-small" type="submit">Сохранить</button>
+          <button class="button button-small button-danger" type="button" data-action="delete-client" data-client-id="${escapeHtml(client.id)}">Удалить</button>
+        </div>
+      </form>
+      <div class="client-card-summary">
+        <div class="summary-line">
+          <span class="summary-label">Доступы</span>
+          <div class="summary-chips">
+            ${
+              users.length
+                ? users.map((user) => renderAccessChip(user)).join("")
+                : '<span class="summary-chip muted-chip">нет доступов</span>'
+            }
+          </div>
+        </div>
+        <div class="summary-line">
+          <span class="summary-label">Дашборды</span>
+          <div class="summary-chips">
+            <span class="summary-chip">${escapeHtml(tabs.length)} вклад.</span>
+            <span class="summary-chip">${escapeHtml(dashboards.length)} граф.</span>
+            ${tabs.map((tab) => `<span class="summary-chip">${escapeHtml(tab.title)}</span>`).join("")}
+          </div>
+        </div>
       </div>
-      <div class="field">
-        <label>Slug</label>
-        <input name="slug" value="${escapeHtml(client.slug)}" autocapitalize="none" required>
-      </div>
-      <div class="field">
-        <label>Логин</label>
-        <input name="username" value="${escapeHtml(client.user?.username || "")}" autocapitalize="none" required>
-      </div>
-      <div class="field">
-        <label>Новый пароль</label>
-        <input name="password" autocomplete="new-password" placeholder="Без изменений">
-      </div>
-      <label class="checkbox-field">
-        <input name="isActive" type="checkbox" ${checked(client.isActive && client.user?.isActive !== false)}>
-        Активен
-      </label>
-      <div class="row-actions">
-        <button class="button button-small" type="submit">Сохранить</button>
-        <button class="button button-small button-danger" type="button" data-action="delete-client" data-client-id="${escapeHtml(client.id)}">Удалить</button>
-      </div>
-    </form>
+    </article>
   `;
+}
+
+function renderAccessChip(user) {
+  const allowedCount = user.allowedDashboardIds?.length || 0;
+  const mode = user.accessMode === "custom" ? `${allowedCount} граф.` : "все графики";
+  const status = user.isActive ? "" : " / выкл.";
+  return `<span class="summary-chip">${escapeHtml(user.username)} - ${escapeHtml(mode)}${escapeHtml(status)}</span>`;
 }
 
 function clientDashboards(client) {
@@ -826,7 +859,18 @@ function renderDashboardTabRow(tab, isOpen) {
   return `
     <article class="dashboard-tab-item ${isOpen ? "is-open" : ""}">
       <button class="dashboard-tab-toggle" type="button" data-action="select-admin-dashboard-tab" data-tab-id="${escapeHtml(tab.id)}">
-        <span>${escapeHtml(tab.title)}</span>
+        <span class="dashboard-tab-main">
+          <strong>${escapeHtml(tab.title)}</strong>
+          <span class="dashboard-tab-chips">
+            ${
+              dashboards.length
+                ? dashboards
+                    .map((dashboard) => `<span class="summary-chip">${escapeHtml(dashboard.title)}</span>`)
+                    .join("")
+                : '<span class="summary-chip muted-chip">графиков нет</span>'
+            }
+          </span>
+        </span>
         <span class="muted">${escapeHtml(dashboards.length)} граф.</span>
       </button>
       <div class="dashboard-tab-body" ${isOpen ? "" : "hidden"}>
