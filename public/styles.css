@@ -316,7 +316,16 @@ a:focus-visible {
 }
 
 .admin-topbar {
-  grid-template-columns: minmax(220px, 1fr) auto;
+  grid-template-columns: minmax(220px, 0.55fr) minmax(640px, 1fr) minmax(170px, 0.45fr);
+}
+
+.admin-topbar-controls {
+  min-width: 0;
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  justify-content: center;
+  justify-self: center;
 }
 
 .client-topbar {
@@ -494,38 +503,24 @@ a:focus-visible {
   text-align: center;
 }
 
-.admin-layout {
+.admin-workspace {
   min-width: 0;
-  width: min(100%, 1440px);
+  width: min(100%, 1180px);
   margin: 0 auto;
   display: grid;
-  grid-template-columns: 250px minmax(0, 1fr);
-  gap: 18px;
+  gap: 16px;
   padding: 18px clamp(14px, 2.6vw, 30px) 34px;
 }
 
-.admin-sidebar {
-  position: sticky;
-  top: 98px;
-  align-self: start;
-  display: grid;
-  gap: 14px;
-}
-
-.admin-workspace {
-  min-width: 0;
-  display: grid;
-  gap: 16px;
-}
-
 .admin-nav {
-  display: grid;
+  display: flex;
+  flex: 0 0 auto;
+  flex-wrap: nowrap;
   gap: 8px;
 }
 
 .admin-nav .tab {
-  width: 100%;
-  justify-content: flex-start;
+  flex: 0 0 auto;
 }
 
 .panel {
@@ -633,13 +628,15 @@ a:focus-visible {
 }
 
 .admin-client-picker.compact {
-  width: 100%;
-  max-width: none;
-  display: grid;
-  gap: 4px;
+  width: 220px;
+  max-width: 220px;
+  display: flex;
+  gap: 8px;
+  align-items: center;
 }
 
 .admin-client-picker.compact span {
+  flex: 0 0 auto;
   color: var(--muted-strong);
   font-size: 11px;
   font-weight: 800;
@@ -648,7 +645,8 @@ a:focus-visible {
 }
 
 .admin-client-picker.compact select {
-  min-height: 46px;
+  min-width: 0;
+  min-height: 48px;
 }
 
 .design-form {
@@ -851,16 +849,10 @@ a:focus-visible {
     grid-template-columns: 1fr auto;
   }
 
-  .admin-layout {
-    grid-template-columns: 1fr;
-  }
-
-  .admin-sidebar {
-    position: static;
-  }
-
-  .admin-nav {
-    grid-template-columns: repeat(4, minmax(0, 1fr));
+  .admin-topbar-controls {
+    grid-column: 1 / -1;
+    justify-self: start;
+    flex-wrap: wrap;
   }
 
   .row-actions {
@@ -907,6 +899,8 @@ a:focus-visible {
   }
 
   .admin-nav {
+    width: 100%;
+    display: grid;
     grid-template-columns: 1fr 1fr;
   }
 
