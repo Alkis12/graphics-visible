@@ -723,6 +723,11 @@ a:focus-visible {
   min-height: 48px;
 }
 
+.admin-client-picker.compact.is-placeholder {
+  visibility: hidden;
+  pointer-events: none;
+}
+
 .design-form {
   align-items: end;
 }

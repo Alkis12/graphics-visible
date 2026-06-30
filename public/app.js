@@ -526,25 +526,23 @@ function renderAdmin() {
 }
 
 function renderAdminTopbarClientPicker() {
-  if (!["dashboards", "access", "design"].includes(state.activeAdminTab)) {
-    return "";
-  }
-
   const clients = adminClients();
   const client = selectedAdminClient();
-  if (!clients.length) {
-    return "";
-  }
+  const isVisible = ["dashboards", "access", "design"].includes(state.activeAdminTab) && clients.length;
 
   return `
-    <label class="admin-client-picker compact">
-      <span>Клиент</span>
-      <select data-action="select-admin-client">
-        ${clients
-          .map(
-            (item) => `<option value="${escapeHtml(item.id)}" ${item.id === client?.id ? "selected" : ""}>${escapeHtml(item.name)}</option>`,
-          )
-          .join("")}
+    <label class="admin-client-picker compact ${isVisible ? "" : "is-placeholder"}">
+      <span>${isVisible ? "Клиент" : ""}</span>
+      <select data-action="select-admin-client" ${isVisible ? "" : "tabindex=\"-1\" aria-hidden=\"true\""}>
+        ${
+          clients.length
+            ? clients
+                .map(
+                  (item) => `<option value="${escapeHtml(item.id)}" ${item.id === client?.id ? "selected" : ""}>${escapeHtml(item.name)}</option>`,
+                )
+                .join("")
+            : '<option value=""></option>'
+        }
       </select>
     </label>
   `;
