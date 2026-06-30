@@ -558,6 +558,17 @@ a:focus-visible {
   grid-template-columns: minmax(180px, 1fr) 100px 92px auto;
 }
 
+.access-row {
+  gap: 14px;
+}
+
+.access-row-grid {
+  display: grid;
+  grid-template-columns: minmax(150px, 1fr) minmax(150px, 1fr) minmax(180px, 0.9fr) 92px auto;
+  gap: 10px;
+  align-items: end;
+}
+
 .row-grid {
   display: grid;
   gap: 10px;
@@ -699,6 +710,49 @@ a:focus-visible {
   justify-content: space-between;
 }
 
+.access-dashboard-list {
+  grid-column: 1 / -1;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.access-dashboard-option {
+  min-height: 54px;
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  padding: 10px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: color-mix(in srgb, var(--panel-soft) 70%, transparent);
+  color: var(--text);
+}
+
+.access-dashboard-option input {
+  width: 18px;
+  height: 18px;
+  min-height: 18px;
+  accent-color: var(--gold);
+}
+
+.access-dashboard-option span {
+  min-width: 0;
+  display: grid;
+  gap: 2px;
+}
+
+.access-dashboard-option strong,
+.access-dashboard-option small {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.access-dashboard-option small {
+  color: var(--muted);
+}
+
 .modal-backdrop {
   position: fixed;
   inset: 0;
@@ -742,6 +796,8 @@ a:focus-visible {
   .client-row-grid,
   .dashboard-row-grid,
   .dashboard-tab-row-grid,
+  .access-row-grid,
+  .access-dashboard-list,
   .design-colors,
   .client-filters {
     grid-template-columns: 1fr;

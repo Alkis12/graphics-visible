@@ -70,7 +70,9 @@ async function upsertOdeon(db) {
 
   const clientId = client.value?._id || client._id || new ObjectId(client.lastErrorObject?.upserted);
   const username = normalizeUsername(env("ODEON_USERNAME", "odeon_manager"));
-  const existing = await db.collection("users").findOne({ role: "client", clientId });
+  const existing =
+    (await db.collection("users").findOne({ role: "client", clientId, username })) ||
+    (await db.collection("users").findOne({ role: "client", clientId, allowedDashboardIds: { $exists: false } }));
   const password = env("ODEON_PASSWORD", existing && !RESET_PASSWORDS ? null : generatePassword());
 
   if (!existing) {
@@ -95,7 +97,7 @@ async function upsertOdeon(db) {
       patch.passwordHash = await hashPassword(password);
     }
 
-    await db.collection("users").updateOne({ _id: existing._id }, { $set: patch });
+    await db.collection("users").updateOne({ _id: existing._id }, { $set: patch, $unset: { allowedDashboardIds: "" } });
   }
 
   const tabsByKey = new Map();

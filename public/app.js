@@ -508,11 +508,13 @@ function renderAdmin() {
         <nav class="admin-nav" aria-label="Разделы админ-панели">
           <button class="tab ${state.activeAdminTab === "clients" ? "is-active" : ""}" type="button" data-action="admin-tab" data-tab="clients">Клиенты</button>
           <button class="tab ${state.activeAdminTab === "dashboards" ? "is-active" : ""}" type="button" data-action="admin-tab" data-tab="dashboards">Дашборды</button>
+          <button class="tab ${state.activeAdminTab === "access" ? "is-active" : ""}" type="button" data-action="admin-tab" data-tab="access">Доступы</button>
           <button class="tab ${state.activeAdminTab === "design" ? "is-active" : ""}" type="button" data-action="admin-tab" data-tab="design">Дизайн</button>
         </nav>
         ${noticeHtml()}
         ${state.activeAdminTab === "clients" ? renderClientsAdmin() : ""}
         ${state.activeAdminTab === "dashboards" ? renderDashboardsAdmin() : ""}
+        ${state.activeAdminTab === "access" ? renderAccessAdmin() : ""}
         ${state.activeAdminTab === "design" ? renderDesignAdmin() : ""}
       </section>
       ${renderAdminModal()}
@@ -543,6 +545,7 @@ function renderClientsAdmin() {
 function renderClientRow(client) {
   return `
     <form class="row-form row-grid client-row-grid" data-action="save-client" data-client-id="${escapeHtml(client.id)}">
+      <input name="userId" type="hidden" value="${escapeHtml(client.user?.id || "")}">
       <div class="field">
         <label>Название</label>
         <input name="name" value="${escapeHtml(client.name)}" required>
@@ -568,6 +571,123 @@ function renderClientRow(client) {
         <button class="button button-small button-danger" type="button" data-action="delete-client" data-client-id="${escapeHtml(client.id)}">Удалить</button>
       </div>
     </form>
+  `;
+}
+
+function clientDashboards(client) {
+  return (client?.tabs || []).flatMap((tab) =>
+    (tab.dashboards || []).map((dashboard) => ({
+      ...dashboard,
+      tabTitle: tab.title,
+    })),
+  );
+}
+
+function renderAccessAdmin() {
+  const clients = adminClients();
+  const client = selectedAdminClient();
+  const users = client?.users || [];
+
+  return `
+    <section class="panel">
+      <div class="panel-head">
+        <h2>Доступы</h2>
+        ${
+          client
+            ? `<button class="button button-primary" type="button" data-action="open-create-access-modal" data-client-id="${escapeHtml(client.id)}">Добавить доступ</button>`
+            : ""
+        }
+      </div>
+      <div class="admin-client-picker">
+        <div class="field">
+          <label>Клиент</label>
+          <select data-action="select-admin-client">
+            ${clients
+              .map(
+                (item) => `<option value="${escapeHtml(item.id)}" ${item.id === client?.id ? "selected" : ""}>${escapeHtml(item.name)}</option>`,
+              )
+              .join("")}
+          </select>
+        </div>
+      </div>
+    </section>
+    ${
+      client
+        ? `
+          <section class="panel">
+            <div class="list">
+              ${
+                users.length
+                  ? users.map((user) => renderAccessRow(client, user)).join("")
+                  : '<div class="empty-state compact">Доступов пока нет</div>'
+              }
+            </div>
+          </section>
+        `
+        : '<section class="panel"><div class="empty-state compact">Сначала создайте клиента</div></section>'
+    }
+  `;
+}
+
+function renderAccessRow(client, user) {
+  const accessMode = user.accessMode || "all";
+
+  return `
+    <form class="row-form access-row" data-action="save-client-user" data-user-id="${escapeHtml(user.id)}">
+      <div class="access-row-grid">
+        <div class="field">
+          <label>Логин</label>
+          <input name="username" value="${escapeHtml(user.username)}" autocapitalize="none" required>
+        </div>
+        <div class="field">
+          <label>Новый пароль</label>
+          <input name="password" autocomplete="new-password" placeholder="Без изменений">
+        </div>
+        <div class="field">
+          <label>Режим</label>
+          <select name="accessMode">
+            <option value="all" ${accessMode === "all" ? "selected" : ""}>Все графики клиента</option>
+            <option value="custom" ${accessMode === "custom" ? "selected" : ""}>Только выбранные</option>
+          </select>
+        </div>
+        <label class="checkbox-field">
+          <input name="isActive" type="checkbox" ${checked(user.isActive)}>
+          Активен
+        </label>
+        <div class="row-actions">
+          <button class="button button-small" type="submit">Сохранить</button>
+          <button class="button button-small button-danger" type="button" data-action="delete-client-user" data-user-id="${escapeHtml(user.id)}">Удалить</button>
+        </div>
+      </div>
+      ${renderDashboardAccessOptions(client, user.allowedDashboardIds || [])}
+    </form>
+  `;
+}
+
+function renderDashboardAccessOptions(client, allowedDashboardIds = []) {
+  const dashboards = clientDashboards(client);
+  const allowed = new Set(allowedDashboardIds);
+
+  return `
+    <div class="access-dashboard-list">
+      ${
+        dashboards.length
+          ? dashboards
+              .map(
+                (dashboard) => `
+                  <label class="access-dashboard-option">
+                    <input name="allowedDashboardIds" type="checkbox" value="${escapeHtml(dashboard.id)}" ${checked(allowed.has(dashboard.id))}>
+                    <span>
+                      <strong>${escapeHtml(dashboard.title)}</strong>
+                      <small>${escapeHtml(dashboard.tabTitle)}</small>
+                    </span>
+                  </label>
+                `,
+              )
+              .join("")
+          : '<div class="empty-state compact">У клиента пока нет графиков</div>'
+      }
+    </div>
   `;
 }
 
@@ -846,6 +966,61 @@ function renderAdminModal() {
     `;
   }
 
+  if (state.modal.type === "createAccess") {
+    const client = adminClients().find((item) => item.id === state.modal.clientId);
+    if (!client) {
+      return "";
+    }
+
+    return `
+      <div class="modal-backdrop" data-action="close-modal">
+        <section class="modal-panel modal-panel-wide" role="dialog" aria-modal="true" aria-labelledby="create-access-title">
+          <div class="modal-head">
+            <h2 id="create-access-title">Добавить доступ</h2>
+            <button class="button button-small" type="button" data-action="close-modal">Закрыть</button>
+          </div>
+          <form class="form-grid" data-action="create-client-user">
+            <input name="clientId" type="hidden" value="${escapeHtml(client.id)}">
+            <div class="field">
+              <label>Клиент</label>
+              <input value="${escapeHtml(client.name)}" disabled>
+            </div>
+            <div class="field">
+              <label>Логин</label>
+              <input name="username" autocapitalize="none" required autofocus>
+            </div>
+            <div class="field">
+              <label>Пароль</label>
+              <div class="password-line">
+                <input id="new-access-password" name="password" autocomplete="new-password" required>
+                <button class="button button-small" type="button" data-action="generate-password" data-target="new-access-password">Сгенерировать</button>
+              </div>
+            </div>
+            <div class="field">
+              <label>Режим</label>
+              <select name="accessMode">
+                <option value="custom" selected>Только выбранные</option>
+                <option value="all">Все графики клиента</option>
+              </select>
+            </div>
+            <label class="checkbox-field">
+              <input name="isActive" type="checkbox" checked>
+              Активен
+            </label>
+            <div class="field field-wide">
+              <label>Доступные графики</label>
+              ${renderDashboardAccessOptions(client, [])}
+            </div>
+            <div class="modal-actions">
+              <button class="button" type="button" data-action="close-modal">Отмена</button>
+              <button class="button button-primary" type="submit">Создать доступ</button>
+            </div>
+          </form>
+        </section>
+      </div>
+    `;
+  }
+
   if (state.modal.type === "createTab") {
     const client = adminClients().find((item) => item.id === state.modal.clientId);
     if (!client) {
@@ -986,6 +1161,34 @@ document.addEventListener("submit", async (event) => {
         body: JSON.stringify(values),
       });
       setNotice("Клиент сохранен");
+      render();
+    }
+
+    if (action === "create-client-user") {
+      const values = formValues(form);
+      values.isActive = form.elements.isActive.checked;
+      values.allowedDashboardIds = new FormData(form).getAll("allowedDashboardIds");
+      state.adminState = await api("/api/admin/client-users", {
+        method: "POST",
+        body: JSON.stringify(values),
+      });
+      state.modal = null;
+      setNotice("Доступ создан");
+      render();
+    }
+
+    if (action === "save-client-user") {
+      const values = formValues(form);
+      if (!values.password) {
+        delete values.password;
+      }
+      values.isActive = form.elements.isActive.checked;
+      values.allowedDashboardIds = new FormData(form).getAll("allowedDashboardIds");
+      state.adminState = await api(`/api/admin/client-users/${form.dataset.userId}`, {
+        method: "PATCH",
+        body: JSON.stringify(values),
+      });
+      setNotice("Доступ сохранен");
       render();
     }
 
@@ -1163,6 +1366,16 @@ document.addEventListener("click", async (event) => {
       return;
     }
 
+    if (action === "open-create-access-modal") {
+      state.modal = {
+        type: "createAccess",
+        clientId: button.dataset.clientId,
+      };
+      setNotice(null);
+      render();
+      return;
+    }
+
     if (action === "open-create-dashboard-tab-modal") {
       state.modal = {
         type: "createTab",
@@ -1248,6 +1461,15 @@ document.addEventListener("click", async (event) => {
         state.selectedAdminDashboardTabId = "";
       }
       setNotice("Клиент удален");
+      render();
+    }
+
+    if (action === "delete-client-user") {
+      if (!confirm("Удалить этот доступ?")) {
+        return;
+      }
+      state.adminState = await api(`/api/admin/client-users/${button.dataset.userId}`, { method: "DELETE" });
+      setNotice("Доступ удален");
       render();
     }
 

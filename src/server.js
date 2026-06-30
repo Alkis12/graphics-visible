@@ -100,6 +100,23 @@ function publicUser(user, client = null) {
     role: user.role,
     clientId: user.clientId ? String(user.clientId) : null,
     clientName: client?.name || null,
+    accessMode: Array.isArray(user.allowedDashboardIds) ? "custom" : "all",
+  };
+}
+
+function serializeClientUser(user) {
+  const allowedDashboardIds = Array.isArray(user.allowedDashboardIds)
+    ? user.allowedDashboardIds.map((id) => String(id))
+    : [];
+
+  return {
+    id: String(user._id),
+    username: user.username,
+    isActive: user.isActive !== false,
+    accessMode: Array.isArray(user.allowedDashboardIds) ? "custom" : "all",
+    allowedDashboardIds,
+    createdAt: user.createdAt,
+    updatedAt: user.updatedAt,
   };
 }
 
@@ -160,7 +177,14 @@ function normalizeDesignInput(body = {}) {
   return design;
 }
 
-function serializeClient(client, user = null, tabs = []) {
+function serializeClient(client, users = [], tabs = []) {
+  const userList = Array.isArray(users) ? users : users ? [users] : [];
+  const primaryUser =
+    userList.find((user) => !Array.isArray(user.allowedDashboardIds)) ||
+    userList.find((user) => user.isActive !== false) ||
+    userList[0] ||
+    null;
+
   return {
     id: String(client._id),
     name: client.name,
@@ -169,14 +193,8 @@ function serializeClient(client, user = null, tabs = []) {
     isActive: client.isActive !== false,
     createdAt: client.createdAt,
     updatedAt: client.updatedAt,
-    user: user
-      ? {
-          id: String(user._id),
-          username: user.username,
-          isActive: user.isActive !== false,
-          updatedAt: user.updatedAt,
-      }
-      : null,
+    user: primaryUser ? serializeClientUser(primaryUser) : null,
+    users: userList.map(serializeClientUser),
     tabs,
   };
 }
@@ -229,7 +247,14 @@ async function buildAdminState(db) {
     db.collection("dashboards").find().sort({ sortOrder: 1, title: 1 }).toArray(),
   ]);
 
-  const usersByClientId = new Map(users.map((user) => [String(user.clientId), user]));
+  const usersByClientId = users.reduce((acc, user) => {
+    const key = String(user.clientId);
+    if (!acc.has(key)) {
+      acc.set(key, []);
+    }
+    acc.get(key).push(user);
+    return acc;
+  }, new Map());
   const dashboardsByTabId = dashboards.reduce((acc, dashboard) => {
     const key = String(dashboard.tabId);
     if (!acc.has(key)) {
@@ -251,7 +276,7 @@ async function buildAdminState(db) {
     clients: clients.map((client) =>
       serializeClient(
         client,
-        usersByClientId.get(String(client._id)) || null,
+        usersByClientId.get(String(client._id)) || [],
         (tabsByClientId.get(String(client._id)) || []).map((tab) =>
           serializeDashboardTab(tab, dashboardsByTabId.get(String(tab._id)) || []),
         ),
@@ -268,6 +293,48 @@ function normalizeDashboardInput(value) {
     datalensId: normalizeDatalensId(sourceInput),
     sourceInput,
   };
+}
+
+function dashboardAccessIds(user) {
+  if (!Array.isArray(user?.allowedDashboardIds)) {
+    return null;
+  }
+
+  return user.allowedDashboardIds
+    .map((id) => (ObjectId.isValid(id) ? new ObjectId(id) : null))
+    .filter(Boolean);
+}
+
+async function dashboardAccessPatch(db, clientId, body = {}) {
+  const accessMode = cleanString(body.accessMode || "all");
+  if (accessMode !== "custom") {
+    return { set: {}, unset: { allowedDashboardIds: "" } };
+  }
+
+  const rawIds = Array.isArray(body.allowedDashboardIds)
+    ? body.allowedDashboardIds
+    : body.allowedDashboardIds
+      ? [body.allowedDashboardIds]
+      : [];
+  const ids = [...new Set(rawIds.map(cleanString).filter(Boolean))].map((id) => {
+    if (!ObjectId.isValid(id)) {
+      const error = new Error("Некорректный график в доступе");
+      error.status = 400;
+      throw error;
+    }
+    return new ObjectId(id);
+  });
+
+  if (ids.length) {
+    const existingCount = await db.collection("dashboards").countDocuments({ _id: { $in: ids }, clientId });
+    if (existingCount !== ids.length) {
+      const error = new Error("В доступ можно добавить только графики выбранного клиента");
+      error.status = 400;
+      throw error;
+    }
+  }
+
+  return { set: { allowedDashboardIds: ids }, unset: {} };
 }
 
 async function upsertDashboardTab(db, clientId, tab) {
@@ -447,6 +514,13 @@ app.get(
     }
 
     const clientId = new ObjectId(req.session.user.clientId);
+    const user = await db.collection("users").findOne({ _id: new ObjectId(req.session.user.id), role: "client", clientId });
+    if (!user || user.isActive === false) {
+      res.status(403).json({ error: "Доступ отключен" });
+      return;
+    }
+
+    const allowedDashboardIds = dashboardAccessIds(user);
     const client = await db.collection("clients").findOne({ _id: clientId });
     const tabs = await db
       .collection("dashboardTabs")
@@ -454,9 +528,14 @@ app.get(
       .sort({ sortOrder: 1, title: 1 })
       .toArray();
     const tabIds = tabs.map((tab) => tab._id);
+    const dashboardQuery = { clientId, tabId: { $in: tabIds }, isActive: { $ne: false } };
+    if (allowedDashboardIds) {
+      dashboardQuery._id = { $in: allowedDashboardIds };
+    }
+
     const dashboards = await db
       .collection("dashboards")
-      .find({ clientId, tabId: { $in: tabIds }, isActive: { $ne: false } })
+      .find(dashboardQuery)
       .sort({ sortOrder: 1, title: 1 })
       .toArray();
     const dashboardsByTabId = dashboards.reduce((acc, dashboard) => {
@@ -470,7 +549,9 @@ app.get(
 
     res.json({
       client: client ? serializeClient(client) : null,
-      tabs: tabs.map((tab) => serializeDashboardTab(tab, dashboardsByTabId.get(String(tab._id)) || [])),
+      tabs: tabs
+        .map((tab) => serializeDashboardTab(tab, dashboardsByTabId.get(String(tab._id)) || []))
+        .filter((tab) => !allowedDashboardIds || tab.dashboards.length),
       dashboards: dashboards.map(serializeDashboard),
     });
   }),
@@ -596,8 +677,12 @@ app.patch(
     }
 
     if (shouldUpdateUser) {
+      const userFilter = req.body.userId
+        ? { _id: objectIdFromParam(req.body.userId), role: "client", clientId }
+        : { role: "client", clientId, allowedDashboardIds: { $exists: false } };
+
       await db.collection("users").updateOne(
-        { role: "client", clientId },
+        userFilter,
         {
           $set: userPatch,
           $setOnInsert: {
@@ -610,6 +695,98 @@ app.patch(
       );
     }
 
+    res.json(await buildAdminState(db));
+  }),
+);
+
+app.post(
+  "/api/admin/client-users",
+  requireAdmin,
+  asyncHandler(async (req, res) => {
+    const db = await getDb();
+    const now = new Date();
+    const clientId = objectIdFromParam(req.body.clientId);
+    const username = normalizeUsername(req.body.username);
+    const password = cleanString(req.body.password);
+
+    if (!username || !password) {
+      res.status(400).json({ error: "Заполните логин и пароль" });
+      return;
+    }
+
+    const client = await db.collection("clients").findOne({ _id: clientId });
+    if (!client) {
+      res.status(404).json({ error: "Клиент не найден" });
+      return;
+    }
+
+    const access = await dashboardAccessPatch(db, clientId, req.body);
+    await db.collection("users").insertOne({
+      username,
+      passwordHash: await hashPassword(password),
+      role: "client",
+      clientId,
+      isActive: toBoolean(req.body.isActive, true),
+      ...access.set,
+      createdAt: now,
+      updatedAt: now,
+    });
+
+    res.status(201).json(await buildAdminState(db));
+  }),
+);
+
+app.patch(
+  "/api/admin/client-users/:id",
+  requireAdmin,
+  asyncHandler(async (req, res) => {
+    const db = await getDb();
+    const userId = objectIdFromParam(req.params.id);
+    const user = await db.collection("users").findOne({ _id: userId, role: "client" });
+    if (!user) {
+      res.status(404).json({ error: "Доступ не найден" });
+      return;
+    }
+
+    const patch = { updatedAt: new Date() };
+    if (req.body.username !== undefined) {
+      const username = normalizeUsername(req.body.username);
+      if (!username) {
+        res.status(400).json({ error: "Логин не может быть пустым" });
+        return;
+      }
+      patch.username = username;
+    }
+
+    if (req.body.password) {
+      patch.passwordHash = await hashPassword(req.body.password);
+    }
+
+    if (req.body.isActive !== undefined) {
+      patch.isActive = toBoolean(req.body.isActive);
+    }
+
+    const access = await dashboardAccessPatch(db, user.clientId, req.body);
+    Object.assign(patch, access.set);
+
+    const update = { $set: patch };
+    if (Object.keys(access.unset).length) {
+      update.$unset = access.unset;
+    }
+
+    await db.collection("users").updateOne({ _id: userId, role: "client" }, update);
+    res.json(await buildAdminState(db));
+  }),
+);
+
+app.delete(
+  "/api/admin/client-users/:id",
+  requireAdmin,
+  asyncHandler(async (req, res) => {
+    const db = await getDb();
+    const userId = objectIdFromParam(req.params.id);
+
+    await db.collection("users").deleteOne({ _id: userId, role: "client" });
     res.json(await buildAdminState(db));
   }),
 );
