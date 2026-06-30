@@ -499,12 +499,15 @@ function renderAdmin() {
           <h1>Админ-панель</h1>
           <div class="topbar-meta">${escapeHtml(state.user.username)}</div>
         </div>
-        <nav class="admin-nav" aria-label="Разделы админ-панели">
-          <button class="tab ${state.activeAdminTab === "clients" ? "is-active" : ""}" type="button" data-action="admin-tab" data-tab="clients">Клиенты</button>
-          <button class="tab ${state.activeAdminTab === "dashboards" ? "is-active" : ""}" type="button" data-action="admin-tab" data-tab="dashboards">Дашборды</button>
-          <button class="tab ${state.activeAdminTab === "access" ? "is-active" : ""}" type="button" data-action="admin-tab" data-tab="access">Доступы</button>
-          <button class="tab ${state.activeAdminTab === "design" ? "is-active" : ""}" type="button" data-action="admin-tab" data-tab="design">Дизайн</button>
-        </nav>
+        <div class="admin-topbar-controls">
+          <nav class="admin-nav" aria-label="Разделы админ-панели">
+            <button class="tab ${state.activeAdminTab === "clients" ? "is-active" : ""}" type="button" data-action="admin-tab" data-tab="clients">Клиенты</button>
+            <button class="tab ${state.activeAdminTab === "dashboards" ? "is-active" : ""}" type="button" data-action="admin-tab" data-tab="dashboards">Дашборды</button>
+            <button class="tab ${state.activeAdminTab === "access" ? "is-active" : ""}" type="button" data-action="admin-tab" data-tab="access">Доступы</button>
+            <button class="tab ${state.activeAdminTab === "design" ? "is-active" : ""}" type="button" data-action="admin-tab" data-tab="design">Дизайн</button>
+          </nav>
+          ${renderAdminTopbarClientPicker()}
+        </div>
         <div class="topbar-actions">
           <button class="button" type="button" data-action="refresh-admin">Обновить</button>
           <button class="button" type="button" data-action="logout">Выйти</button>
@@ -519,6 +522,31 @@ function renderAdmin() {
       </section>
       ${renderAdminModal()}
     </section>
+  `;
+}
+
+function renderAdminTopbarClientPicker() {
+  if (!["dashboards", "access", "design"].includes(state.activeAdminTab)) {
+    return "";
+  }
+
+  const clients = adminClients();
+  const client = selectedAdminClient();
+  if (!clients.length) {
+    return "";
+  }
+
+  return `
+    <label class="admin-client-picker compact">
+      <span>Клиент</span>
+      <select data-action="select-admin-client">
+        ${clients
+          .map(
+            (item) => `<option value="${escapeHtml(item.id)}" ${item.id === client?.id ? "selected" : ""}>${escapeHtml(item.name)}</option>`,
+          )
+          .join("")}
+      </select>
+    </label>
   `;
 }
 
@@ -584,37 +612,18 @@ function clientDashboards(client) {
 }
 
 function renderAccessAdmin() {
-  const clients = adminClients();
   const client = selectedAdminClient();
   const users = client?.users || [];
 
   return `
-    <section class="panel">
-      <div class="panel-head">
-        <h2>Доступы</h2>
-        ${
-          client
-            ? `<button class="button button-primary" type="button" data-action="open-create-access-modal" data-client-id="${escapeHtml(client.id)}">Добавить доступ</button>`
-            : ""
-        }
-      </div>
-      <div class="admin-client-picker">
-        <div class="field">
-          <label>Клиент</label>
-          <select data-action="select-admin-client">
-            ${clients
-              .map(
-                (item) => `<option value="${escapeHtml(item.id)}" ${item.id === client?.id ? "selected" : ""}>${escapeHtml(item.name)}</option>`,
-              )
-              .join("")}
-          </select>
-        </div>
-      </div>
-    </section>
     ${
       client
         ? `
           <section class="panel">
+            <div class="panel-head">
+              <h2>Логины клиента</h2>
+              <button class="button button-primary" type="button" data-action="open-create-access-modal" data-client-id="${escapeHtml(client.id)}">Добавить доступ</button>
+            </div>
             <div class="list">
               ${
                 users.length
@@ -692,28 +701,10 @@ function renderDashboardAccessOptions(client, allowedDashboardIds = []) {
 }
 
 function renderDesignAdmin() {
-  const clients = adminClients();
   const client = selectedAdminClient();
   const design = mergeDesign(client?.design);
 
   return `
-    <section class="panel">
-      <div class="panel-head">
-        <h2>Дизайн</h2>
-      </div>
-      <div class="admin-client-picker">
-        <div class="field">
-          <label>Клиент</label>
-          <select data-action="select-admin-client">
-            ${clients
-              .map(
-                (item) => `<option value="${escapeHtml(item.id)}" ${item.id === client?.id ? "selected" : ""}>${escapeHtml(item.name)}</option>`,
-              )
-              .join("")}
-          </select>
-        </div>
-      </div>
-    </section>
     ${
       client
         ? `
@@ -802,35 +793,17 @@ function selectedAdminDashboardTab(client) {
 }
 
 function renderDashboardsAdmin() {
-  const clients = adminClients();
   const client = selectedAdminClient();
   const tabs = client?.tabs || [];
   const activeTab = selectedAdminDashboardTab(client);
 
   return `
-    <section class="panel">
-      <div class="panel-head">
-        <h2>Дашборды</h2>
-      </div>
-      <div class="admin-client-picker">
-        <div class="field">
-          <label>Клиент</label>
-          <select data-action="select-admin-client">
-            ${clients
-              .map(
-                (item) => `<option value="${escapeHtml(item.id)}" ${item.id === client?.id ? "selected" : ""}>${escapeHtml(item.name)}</option>`,
-              )
-              .join("")}
-          </select>
-        </div>
-      </div>
-    </section>
     ${
       client
         ? `
           <section class="panel">
             <div class="panel-head">
-              <h2>Вкладки: ${escapeHtml(client.name)}</h2>
+              <h2>Вкладки</h2>
               <button class="button button-primary" type="button" data-action="open-create-dashboard-tab-modal" data-client-id="${escapeHtml(client.id)}">Добавить вкладку</button>
             </div>
             <div class="list">

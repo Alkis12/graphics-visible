@@ -316,10 +316,16 @@ a:focus-visible {
 }
 
 .admin-topbar {
-  grid-template-columns: minmax(220px, 0.7fr) minmax(360px, 1fr) minmax(170px, 0.7fr);
+  grid-template-columns: minmax(220px, 0.6fr) minmax(520px, 1fr) minmax(170px, 0.5fr);
 }
 
-.admin-topbar .admin-nav {
+.admin-topbar-controls {
+  min-width: 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  align-items: center;
+  justify-content: center;
   justify-self: center;
 }
 
@@ -619,6 +625,25 @@ a:focus-visible {
   max-width: 420px;
 }
 
+.admin-client-picker.compact {
+  width: min(260px, 100%);
+  max-width: 260px;
+  display: grid;
+  gap: 4px;
+}
+
+.admin-client-picker.compact span {
+  color: var(--muted-strong);
+  font-size: 11px;
+  font-weight: 800;
+  line-height: 1;
+  text-transform: uppercase;
+}
+
+.admin-client-picker.compact select {
+  min-height: 46px;
+}
+
 .design-form {
   align-items: end;
 }
@@ -819,7 +844,7 @@ a:focus-visible {
     grid-template-columns: 1fr auto;
   }
 
-  .admin-topbar .admin-nav {
+  .admin-topbar .admin-topbar-controls {
     grid-column: 1 / -1;
     justify-self: start;
   }
@@ -867,12 +892,17 @@ a:focus-visible {
     grid-template-columns: 1fr;
   }
 
-  .admin-topbar .admin-nav {
+  .admin-topbar .admin-topbar-controls {
     justify-self: stretch;
   }
 
   .admin-topbar .admin-nav .tab {
     flex: 1 1 130px;
+  }
+
+  .admin-client-picker.compact {
+    width: 100%;
+    max-width: none;
   }
 
   .client-topbar .topbar-actions {
