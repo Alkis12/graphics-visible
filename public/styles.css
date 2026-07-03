@@ -400,9 +400,14 @@ a:focus-visible {
 }
 
 .client-topbar .topbar-actions {
-  display: grid;
-  gap: 4px;
-  justify-items: end;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+}
+
+.client-topbar .topbar-actions .topbar-meta {
+  flex: 0 0 100%;
+  text-align: right;
 }
 
 .client-shell,
@@ -1083,7 +1088,7 @@ a:focus-visible {
   }
 
   .client-topbar .topbar-actions {
-    justify-items: stretch;
+    justify-content: stretch;
   }
 
   .topbar-actions .button,
