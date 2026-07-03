@@ -42,7 +42,25 @@ const DEFAULT_CLIENT_DESIGN = {
   },
 };
 
+DEFAULT_CLIENT_DESIGN.themes = {
+  dark: DEFAULT_CLIENT_DESIGN.colors,
+  light: {
+    background: "#f7f7f4",
+    surface: "#ffffff",
+    surfaceSoft: "#f0ece1",
+    surfaceStrong: "#ead487",
+    text: "#17140d",
+    mutedText: "#6f6857",
+    primary: "#c39a35",
+    primaryStrong: "#8c6716",
+    primaryText: "#17140d",
+    border: "#ded4bb",
+    frameBackground: "#ffffff",
+  },
+};
+
 const DESIGN_COLOR_KEYS = Object.keys(DEFAULT_CLIENT_DESIGN.colors);
+const DESIGN_THEME_NAMES = ["dark", "light"];
 const HEX_COLOR_RE = /^#[0-9a-f]{6}$/i;
 const LOGO_DATA_URL_RE = /^data:image\/(?:png|jpe?g|webp|gif|svg\+xml);base64,[a-z0-9+/=]+$/i;
 
@@ -125,20 +143,33 @@ function normalizeHexColor(value, fallback) {
   return HEX_COLOR_RE.test(color) ? color : fallback;
 }
 
+function serializeThemeColors(colors = {}, themeName = "dark") {
+  const fallbackColors = DEFAULT_CLIENT_DESIGN.themes[themeName] || DEFAULT_CLIENT_DESIGN.colors;
+  return DESIGN_COLOR_KEYS.reduce(
+    (acc, key) => ({
+      ...acc,
+      [key]: normalizeHexColor(colors[key], fallbackColors[key]),
+    }),
+    {},
+  );
+}
+
 function serializeDesign(design = {}) {
   const savedColors = design.colors || {};
   const brandText = cleanString(design.brandText);
+  const themes = DESIGN_THEME_NAMES.reduce(
+    (acc, themeName) => ({
+      ...acc,
+      [themeName]: serializeThemeColors(design.themes?.[themeName] || (themeName === "dark" ? savedColors : {}), themeName),
+    }),
+    {},
+  );
 
   return {
     brandText: /^odeon$/i.test(brandText) ? "Одеон" : brandText || DEFAULT_CLIENT_DESIGN.brandText,
     logoDataUrl: cleanString(design.logoDataUrl),
-    colors: DESIGN_COLOR_KEYS.reduce(
-      (acc, key) => ({
-        ...acc,
-        [key]: normalizeHexColor(savedColors[key], DEFAULT_CLIENT_DESIGN.colors[key]),
-      }),
-      {},
-    ),
+    colors: themes.dark,
+    themes,
   };
 }
 
@@ -172,6 +203,22 @@ function normalizeDesignInput(body = {}) {
       }
       design.colors[key] = color.toLowerCase();
     }
+  }
+
+  if (body.themes) {
+    for (const themeName of DESIGN_THEME_NAMES) {
+      const themeColors = body.themes[themeName] || {};
+      for (const key of DESIGN_COLOR_KEYS) {
+        const color = cleanString(themeColors[key]);
+        if (!HEX_COLOR_RE.test(color)) {
+          const error = new Error("Р¦РІРµС‚Р° РґРѕР»Р¶РЅС‹ Р±С‹С‚СЊ РІ С„РѕСЂРјР°С‚Рµ #RRGGBB");
+          error.status = 400;
+          throw error;
+        }
+        design.themes[themeName][key] = color.toLowerCase();
+      }
+    }
+    design.colors = design.themes.dark;
   }
 
   return design;

@@ -8,6 +8,8 @@ const state = {
   activeClientTab: "",
   selectedAdminClientId: "",
   selectedAdminDashboardTabId: "",
+  uiTheme: "dark",
+  designTheme: "dark",
   modal: null,
   filters: {
     category: "",
@@ -32,6 +34,8 @@ const FILTER_CATEGORIES = [
 ];
 const FILTER_EVENTS = buildEventOptions("2026-05-28", "2026-07-31");
 const PLANETRA_LOGO_SRC = "/assets/planetra.png";
+const THEME_STORAGE_KEY = "graphicsVisibleTheme";
+const THEMES = ["dark", "light"];
 const DEFAULT_CLIENT_DESIGN = {
   brandText: "Одеон",
   logoDataUrl: "",
@@ -49,6 +53,22 @@ const DEFAULT_CLIENT_DESIGN = {
     frameBackground: "#151515",
   },
 };
+DEFAULT_CLIENT_DESIGN.themes = {
+  dark: DEFAULT_CLIENT_DESIGN.colors,
+  light: {
+    background: "#f7f7f4",
+    surface: "#ffffff",
+    surfaceSoft: "#f0ece1",
+    surfaceStrong: "#ead487",
+    text: "#17140d",
+    mutedText: "#6f6857",
+    primary: "#c39a35",
+    primaryStrong: "#8c6716",
+    primaryText: "#17140d",
+    border: "#ded4bb",
+    frameBackground: "#ffffff",
+  },
+};
 const DESIGN_COLOR_FIELDS = [
   ["background", "Фон страницы"],
   ["surface", "Основные панели"],
@@ -62,6 +82,28 @@ const DESIGN_COLOR_FIELDS = [
   ["border", "Границы"],
   ["frameBackground", "Фон графиков"],
 ];
+
+function normalizeTheme(value) {
+  return value === "light" ? "light" : "dark";
+}
+
+function readStoredTheme() {
+  try {
+    return normalizeTheme(localStorage.getItem(THEME_STORAGE_KEY));
+  } catch {
+    return "dark";
+  }
+}
+
+function storeTheme(theme) {
+  try {
+    localStorage.setItem(THEME_STORAGE_KEY, normalizeTheme(theme));
+  } catch {
+    // The selected theme still applies for the current render.
+  }
+}
+
+state.uiTheme = readStoredTheme();
 
 function buildEventOptions(startDate, endDate) {
   const options = [];
@@ -94,8 +136,12 @@ function checked(value) {
   return value ? "checked" : "";
 }
 
-function mergeDesign(design = {}) {
+function mergeDesign(design = {}, theme = state.uiTheme) {
   const brandText = design.brandText || DEFAULT_CLIENT_DESIGN.brandText;
+  const themeName = normalizeTheme(theme);
+  const legacyColors = design.colors || {};
+  const savedThemeColors = design.themes?.[themeName] || (themeName === "dark" ? legacyColors : {});
+  const fallbackThemeColors = DEFAULT_CLIENT_DESIGN.themes[themeName] || DEFAULT_CLIENT_DESIGN.colors;
 
   return {
     brandText: /^odeon$/i.test(brandText) ? "Одеон" : brandText,
@@ -103,15 +149,27 @@ function mergeDesign(design = {}) {
     colors: DESIGN_COLOR_FIELDS.reduce(
       (acc, [key]) => ({
         ...acc,
-        [key]: design.colors?.[key] || DEFAULT_CLIENT_DESIGN.colors[key],
+        [key]: savedThemeColors[key] || fallbackThemeColors[key],
       }),
       {},
     ),
+    themes: THEMES.reduce((acc, name) => {
+      const base = DEFAULT_CLIENT_DESIGN.themes[name] || DEFAULT_CLIENT_DESIGN.colors;
+      const saved = design.themes?.[name] || (name === "dark" ? legacyColors : {});
+      acc[name] = DESIGN_COLOR_FIELDS.reduce(
+        (themeAcc, [key]) => ({
+          ...themeAcc,
+          [key]: saved[key] || base[key],
+        }),
+        {},
+      );
+      return acc;
+    }, {}),
   };
 }
 
-function designStyle(design) {
-  const colors = mergeDesign(design).colors;
+function designStyle(design, theme = state.uiTheme) {
+  const colors = mergeDesign(design, theme).colors;
   return [
     `--bg: ${colors.background}`,
     `--panel: ${colors.surface}`,
@@ -227,7 +285,7 @@ function buildDashboardUrl(dashboard) {
     const url = new URL(baseUrl, window.location.origin);
     url.searchParams.set("_embedded", "1");
     url.searchParams.set("_no_controls", "1");
-    url.searchParams.set("_theme", "dark");
+    url.searchParams.set("_theme", normalizeTheme(state.uiTheme));
 
     if (dashboard.filtersEnabled) {
       ensureDefaultFilters();
@@ -272,18 +330,39 @@ function noticeHtml() {
   return `<div class="notice ${className}">${escapeHtml(state.notice.message)}</div>`;
 }
 
+function renderThemeToggle() {
+  const isLight = normalizeTheme(state.uiTheme) === "light";
+  return `
+    <button class="theme-toggle ${isLight ? "is-light" : "is-dark"}" type="button" data-action="toggle-theme" aria-label="Toggle theme">
+      <span class="theme-toggle-track">
+        <span class="theme-toggle-thumb"></span>
+      </span>
+      <span class="theme-toggle-text">${isLight ? "Light" : "Dark"}</span>
+    </button>
+  `;
+}
+
 function formValues(form) {
   return Object.fromEntries(new FormData(form).entries());
 }
 
 function designValues(form) {
-  return {
-    brandText: form.elements.brandText.value,
-    logoDataUrl: form.elements.logoDataUrl.value,
-    colors: DESIGN_COLOR_FIELDS.reduce((acc, [key]) => {
+  const themeName = normalizeTheme(form.elements.designTheme.value);
+  const currentClient = selectedAdminClient();
+  const existingDesign = mergeDesign(currentClient?.design, themeName);
+  const themes = {
+    ...existingDesign.themes,
+    [themeName]: DESIGN_COLOR_FIELDS.reduce((acc, [key]) => {
       acc[key] = form.elements[`colorText_${key}`].value || form.elements[`color_${key}`].value;
       return acc;
     }, {}),
+  };
+
+  return {
+    brandText: form.elements.brandText.value,
+    logoDataUrl: form.elements.logoDataUrl.value,
+    colors: themes.dark,
+    themes,
   };
 }
 
@@ -383,7 +462,7 @@ function renderClient() {
   const hasFilters = dashboards.some((dashboard) => dashboard.filtersEnabled);
 
   app.innerHTML = `
-    <section class="client-shell" style="${escapeHtml(`${designStyle(design)}; --client-topbar-height: ${hasFilters ? "114px" : "90px"}`)}">
+    <section class="client-shell" data-theme="${escapeHtml(normalizeTheme(state.uiTheme))}" style="${escapeHtml(`${designStyle(design)}; --client-topbar-height: ${hasFilters ? "114px" : "90px"}`)}">
       <header class="topbar client-topbar ${hasFilters ? "has-filters" : "no-filters"}">
         <div class="topbar-title">
           ${renderBrandMark(headerDesign, clientName)}
@@ -391,6 +470,7 @@ function renderClient() {
         </div>
         <div class="client-filter-slot">${hasFilters ? renderClientFilters() : ""}</div>
         <div class="topbar-actions">
+          ${renderThemeToggle()}
           <button class="button" type="button" data-action="logout">Выйти</button>
           <div class="topbar-meta">${escapeHtml(state.user.username)}</div>
         </div>
@@ -492,7 +572,7 @@ function shiftEventFilter(step) {
 
 function renderAdmin() {
   app.innerHTML = `
-    <section class="admin-shell">
+    <section class="admin-shell" data-theme="${escapeHtml(normalizeTheme(state.uiTheme))}">
       <header class="topbar admin-topbar">
         <div class="topbar-title">
           ${renderPlanetraMark()}
@@ -509,6 +589,7 @@ function renderAdmin() {
           ${renderAdminTopbarClientPicker()}
         </div>
         <div class="topbar-actions">
+          ${renderThemeToggle()}
           <button class="button" type="button" data-action="refresh-admin">Обновить</button>
           <button class="button" type="button" data-action="logout">Выйти</button>
         </div>
@@ -733,7 +814,8 @@ function renderDashboardAccessOptions(client, allowedDashboardIds = []) {
 
 function renderDesignAdmin() {
   const client = selectedAdminClient();
-  const design = mergeDesign(client?.design);
+  const editingTheme = normalizeTheme(state.designTheme);
+  const design = mergeDesign(client?.design, editingTheme);
 
   return `
     ${
@@ -742,7 +824,15 @@ function renderDesignAdmin() {
           <section class="panel">
             <form class="form-grid design-form" data-action="save-client-design" data-client-id="${escapeHtml(client.id)}">
               <input name="logoDataUrl" type="hidden" value="${escapeHtml(design.logoDataUrl)}">
-              <div class="design-preview" style="${escapeHtml(designStyle(design))}">
+              <input name="designTheme" type="hidden" value="${escapeHtml(editingTheme)}">
+              <div class="field">
+                <label>&#1058;&#1077;&#1084;&#1072; &#1076;&#1083;&#1103; &#1088;&#1077;&#1076;&#1072;&#1082;&#1090;&#1080;&#1088;&#1086;&#1074;&#1072;&#1085;&#1080;&#1103;</label>
+                <select data-action="select-design-theme">
+                  <option value="dark" ${editingTheme === "dark" ? "selected" : ""}>&#1058;&#1077;&#1084;&#1085;&#1072;&#1103;</option>
+                  <option value="light" ${editingTheme === "light" ? "selected" : ""}>&#1057;&#1074;&#1077;&#1090;&#1083;&#1072;&#1103;</option>
+                </select>
+              </div>
+              <div class="design-preview" style="${escapeHtml(designStyle(design, editingTheme))}">
                 <div class="design-preview-top">
                   ${renderBrandMark(design, client.name)}
                   <strong>${escapeHtml(client.name)}</strong>
@@ -1294,6 +1384,12 @@ document.addEventListener("change", (event) => {
     render();
   }
 
+  if (control.dataset.action === "select-design-theme") {
+    state.designTheme = normalizeTheme(control.value);
+    setNotice(null);
+    render();
+  }
+
   if (control.dataset.action === "logo-upload") {
     const file = control.files?.[0];
     if (!file) {
@@ -1366,6 +1462,13 @@ document.addEventListener("click", async (event) => {
   }
 
   try {
+    if (action === "toggle-theme") {
+      state.uiTheme = normalizeTheme(state.uiTheme) === "light" ? "dark" : "light";
+      storeTheme(state.uiTheme);
+      render();
+      return;
+    }
+
     if (action === "close-modal") {
       state.modal = null;
       render();
