@@ -1,6 +1,6 @@
 import { cleanString } from "./http.js";
 
-const DATALENS_HOSTS = new Set(["datalens.yandex", "datalens.ru"]);
+const DATALENS_HOSTS = new Set(["datalens.yandex", "datalens.ru", "www.datalens.yandex", "www.datalens.ru"]);
 
 function datalensError() {
   const error = new Error("Введите ссылку, iframe-код или id DataLens");
@@ -24,20 +24,23 @@ export function normalizeDatalensId(value) {
     if (!DATALENS_HOSTS.has(parsed.hostname)) {
       throw datalensError();
     }
-    id = parsed.pathname.split("/").filter(Boolean)[0] || "";
+    id = extractDatalensIdFromSegment(parsed.pathname.split("/").filter(Boolean)[0] || "");
   } catch (error) {
     if (candidate.includes("://") || candidate.includes("<")) {
       throw datalensError();
     }
-    id = candidate.replace(/^datalens\.(?:yandex|ru)\//i, "").split(/[/?#]/)[0] || "";
+    id = extractDatalensIdFromSegment(candidate.replace(/^datalens\.(?:yandex|ru)\//i, "").split(/[/?#]/)[0] || "");
   }
 
-  id = id.split("-")[0];
   if (!/^[a-z0-9]{8,}$/i.test(id)) {
     throw datalensError();
   }
 
   return id;
+}
+
+function extractDatalensIdFromSegment(segment) {
+  return cleanString(segment).split("-")[0];
 }
 
 export function buildDatalensUrl(datalensId) {

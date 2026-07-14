@@ -504,6 +504,11 @@ a:focus-visible {
   background: color-mix(in srgb, var(--bg) 92%, var(--panel));
 }
 
+.client-category-filter {
+  grid-template-columns: minmax(220px, 320px);
+  justify-content: center;
+}
+
 .client-filters select {
   min-height: 40px;
 }
@@ -533,6 +538,10 @@ a:focus-visible {
   display: grid;
   gap: 22px;
   padding: 16px clamp(14px, 2.6vw, 30px) 30px;
+}
+
+.dashboard-stack:not(:has(.dashboard-panel + .dashboard-panel)) {
+  grid-template-columns: minmax(0, 1fr);
 }
 
 .operational-stack {
@@ -722,7 +731,7 @@ a:focus-visible {
 }
 
 .dashboard-row-grid {
-  grid-template-columns: minmax(160px, 0.9fr) minmax(240px, 1.5fr) 90px 86px 86px auto;
+  grid-template-columns: minmax(160px, 0.9fr) minmax(240px, 1.5fr) 90px 86px auto;
 }
 
 .dashboard-tab-row-grid {

@@ -13,7 +13,6 @@ const state = {
   modal: null,
   filters: {
     category: "",
-    eventValue: "",
   },
   notice: null,
 };
@@ -21,7 +20,6 @@ const state = {
 const PASSWORD_ALPHABET = "ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz23456789!@#$%";
 const FILTER_PARAMS = {
   category: "ticket_category_tdzf",
-  event: "event_id_internal_9r0j",
 };
 const FILTER_CATEGORIES = [
   "",
@@ -32,7 +30,6 @@ const FILTER_CATEGORIES = [
   "Партер 2 Общая",
   "Партер 3 Общая",
 ];
-const FILTER_EVENTS = buildEventOptions("2026-05-28", "2026-07-31");
 const PLANETRA_LOGO_SRC = "/assets/planetra.png";
 const THEME_STORAGE_KEY = "graphicsVisibleTheme";
 const THEMES = ["dark", "light"];
@@ -104,24 +101,6 @@ function storeTheme(theme) {
 }
 
 state.uiTheme = readStoredTheme();
-
-function buildEventOptions(startDate, endDate) {
-  const options = [];
-  const cursor = dateFromKey(startDate);
-  const end = dateFromKey(endDate);
-
-  while (cursor <= end) {
-    const day = cursor.getDay();
-    if (day !== 1) {
-      const date = dateKey(cursor);
-      const time = day === 0 ? "18:00:00" : "20:00:00";
-      options.push(`${date} ${time}`);
-    }
-    cursor.setDate(cursor.getDate() + 1);
-  }
-
-  return options;
-}
 
 function escapeHtml(value) {
   return String(value ?? "")
@@ -223,6 +202,14 @@ function isOdeonClient(name) {
   return /^(odeon|одеон)\s+(show|шоу)$/i.test(String(name || ""));
 }
 
+function normalizedText(value) {
+  return String(value || "").trim().toLowerCase();
+}
+
+function tabHasCategoryFilter(tab) {
+  return normalizedText(tab?.title).includes("статус билетов");
+}
+
 function clientHeaderDesign(name, design) {
   if (!isOdeonClient(name)) {
     return design;
@@ -232,47 +219,6 @@ function clientHeaderDesign(name, design) {
     ...design,
     brandText: "Театр",
   };
-}
-
-function dateFromKey(value) {
-  const [year, month, day] = value.split("-").map(Number);
-  return new Date(year, month - 1, day);
-}
-
-function dateKey(date) {
-  return [
-    date.getFullYear(),
-    String(date.getMonth() + 1).padStart(2, "0"),
-    String(date.getDate()).padStart(2, "0"),
-  ].join("-");
-}
-
-function formatEventLabel(value) {
-  const date = value.slice(0, 10);
-  const weekday = new Intl.DateTimeFormat("ru-RU", { weekday: "short" }).format(dateFromKey(date));
-  const [year, month, day] = date.split("-");
-  return `${day}.${month}.${year} (${weekday})`;
-}
-
-function formatTodayNote() {
-  const today = new Date();
-  const date = new Intl.DateTimeFormat("ru-RU", {
-    day: "2-digit",
-    month: "2-digit",
-  }).format(today);
-  const weekday = new Intl.DateTimeFormat("ru-RU", { weekday: "short" }).format(today).replace(".", "");
-  return `сегодня ${date}, ${weekday}`;
-}
-
-function ensureDefaultFilters() {
-  if (state.filters.eventValue) {
-    return;
-  }
-
-  const today = dateKey(new Date());
-  const todayEvent = FILTER_EVENTS.find((eventValue) => eventValue.startsWith(today));
-  const nextEvent = FILTER_EVENTS.find((eventValue) => eventValue.slice(0, 10) >= today);
-  state.filters.eventValue = todayEvent || nextEvent || FILTER_EVENTS[0] || "";
 }
 
 function buildDashboardUrl(dashboard) {
@@ -287,9 +233,7 @@ function buildDashboardUrl(dashboard) {
     url.searchParams.set("_no_controls", "1");
     url.searchParams.set("_theme", normalizeTheme(state.uiTheme));
 
-    if (dashboard.filtersEnabled) {
-      ensureDefaultFilters();
-      url.searchParams.set(FILTER_PARAMS.event, state.filters.eventValue);
+    if (tabHasCategoryFilter(clientDashboardTabs().find((tab) => tab.id === state.activeClientTab))) {
       url.searchParams.set(FILTER_PARAMS.category, state.filters.category);
     }
 
@@ -459,7 +403,7 @@ function renderClient() {
   const clientName = displayClientName(rawClientName);
   const design = mergeDesign(state.clientData?.client?.design);
   const headerDesign = clientHeaderDesign(rawClientName, design);
-  const hasFilters = dashboards.some((dashboard) => dashboard.filtersEnabled);
+  const hasFilters = tabHasCategoryFilter(activeTab);
 
   app.innerHTML = `
     <section class="client-shell" data-theme="${escapeHtml(normalizeTheme(state.uiTheme))}" style="${escapeHtml(`${designStyle(design)}; --client-topbar-height: ${hasFilters ? "114px" : "90px"}`)}">
@@ -506,21 +450,10 @@ function renderClientDashboards(dashboards) {
 }
 
 function renderClientFilters() {
-  ensureDefaultFilters();
-
   return `
-    <section class="client-filters" aria-label="Фильтры дашборда">
+    <section class="client-filters client-category-filter" aria-label="Фильтры дашборда">
       <div class="field">
-        <label for="client-event-filter">Дата события</label>
-        <select id="client-event-filter" data-action="filter-event">
-          ${FILTER_EVENTS.map(
-            (eventValue) => `<option value="${escapeHtml(eventValue)}" ${eventValue === state.filters.eventValue ? "selected" : ""}>${escapeHtml(formatEventLabel(eventValue))}</option>`,
-          ).join("")}
-        </select>
-        <div class="field-note">${escapeHtml(formatTodayNote())}</div>
-      </div>
-      <div class="field">
-        <label for="client-category-filter">Категория билета</label>
+        <label for="client-category-filter">Выбор категории</label>
         <select id="client-category-filter" data-action="filter-category">
           ${FILTER_CATEGORIES.map(
             (category) => `<option value="${escapeHtml(category)}" ${category === state.filters.category ? "selected" : ""}>${escapeHtml(category || "Все")}</option>`,
@@ -549,25 +482,6 @@ function renderClientDashboard(dashboard) {
       </section>
     </section>
   `;
-}
-
-function shiftEventFilter(step) {
-  ensureDefaultFilters();
-
-  const currentIndex = FILTER_EVENTS.indexOf(state.filters.eventValue);
-  if (currentIndex < 0) {
-    state.filters.eventValue = FILTER_EVENTS[0] || "";
-    render();
-    return;
-  }
-
-  const nextIndex = Math.min(Math.max(currentIndex + step, 0), FILTER_EVENTS.length - 1);
-  if (nextIndex === currentIndex) {
-    return;
-  }
-
-  state.filters.eventValue = FILTER_EVENTS[nextIndex];
-  render();
 }
 
 function renderAdmin() {
@@ -780,7 +694,7 @@ function renderAccessRow(client, user) {
           <button class="button button-small button-danger" type="button" data-action="delete-client-user" data-user-id="${escapeHtml(user.id)}">Удалить</button>
         </div>
       </div>
-      ${renderDashboardAccessOptions(client, user.allowedDashboardIds || [])}
+      ${accessMode === "custom" ? renderDashboardAccessOptions(client, user.allowedDashboardIds || []) : ""}
     </form>
   `;
 }
@@ -1016,10 +930,6 @@ function renderDashboardRow(dashboard) {
         <input name="isActive" type="checkbox" ${checked(dashboard.isActive)}>
         Активен
       </label>
-      <label class="checkbox-field">
-        <input name="filtersEnabled" type="checkbox" ${checked(dashboard.filtersEnabled)}>
-        Фильтры
-      </label>
       <div class="row-actions">
         <button class="button button-small" type="submit">Сохранить</button>
         <button class="button button-small button-danger" type="button" data-action="delete-dashboard" data-dashboard-id="${escapeHtml(dashboard.id)}">Удалить</button>
@@ -1202,10 +1112,6 @@ function renderAdminModal() {
               <input name="isActive" type="checkbox" checked>
               Активен
             </label>
-            <label class="checkbox-field">
-              <input name="filtersEnabled" type="checkbox" checked>
-              Фильтры
-            </label>
             <div class="modal-actions">
               <button class="button" type="button" data-action="close-modal">Отмена</button>
               <button class="button button-primary" type="submit">Добавить график</button>
@@ -1324,7 +1230,6 @@ document.addEventListener("submit", async (event) => {
     if (action === "create-dashboard") {
       const values = formValues(form);
       values.isActive = form.elements.isActive.checked;
-      values.filtersEnabled = form.elements.filtersEnabled.checked;
       state.adminState = await api("/api/admin/dashboards", {
         method: "POST",
         body: JSON.stringify(values),
@@ -1337,7 +1242,6 @@ document.addEventListener("submit", async (event) => {
     if (action === "save-dashboard") {
       const values = formValues(form);
       values.isActive = form.elements.isActive.checked;
-      values.filtersEnabled = form.elements.filtersEnabled.checked;
       state.adminState = await api(`/api/admin/dashboards/${form.dataset.dashboardId}`, {
         method: "PATCH",
         body: JSON.stringify(values),
@@ -1367,10 +1271,6 @@ document.addEventListener("change", (event) => {
     return;
   }
 
-  if (control.dataset.action === "filter-event") {
-    state.filters.eventValue = control.value;
-    render();
-  }
 
   if (control.dataset.action === "filter-category") {
     state.filters.category = control.value;
@@ -1429,25 +1329,6 @@ document.addEventListener("change", (event) => {
       textInput.value = control.value;
     }
   }
-});
-
-document.addEventListener("keydown", (event) => {
-  const activeTab = state.user?.role === "client" ? clientDashboardTabs().find((tab) => tab.id === state.activeClientTab) : null;
-  if (
-    state.user?.role !== "client" ||
-    !activeTab?.dashboards?.some((dashboard) => dashboard.filtersEnabled) ||
-    !["ArrowLeft", "ArrowRight"].includes(event.key)
-  ) {
-    return;
-  }
-
-  const activeElement = document.activeElement;
-  if (activeElement && ["INPUT", "SELECT", "TEXTAREA"].includes(activeElement.tagName)) {
-    return;
-  }
-
-  event.preventDefault();
-  shiftEventFilter(event.key === "ArrowRight" ? 1 : -1);
 });
 
 document.addEventListener("click", async (event) => {

@@ -41,7 +41,7 @@ export const DEFAULT_DASHBOARDS = [
     title: "Билеты",
     description: "Отслеживание билетов MAX",
     datalensId: "i1bvc2rk1gyw2",
-    filtersEnabled: true,
+    filtersEnabled: false,
     sortOrder: 10,
   },
   {
@@ -50,7 +50,7 @@ export const DEFAULT_DASHBOARDS = [
     title: "Цены продаж",
     description: "Отслеживание цены продаж всех категорий MAX",
     datalensId: "l4f7v9hp1g9a5",
-    filtersEnabled: true,
+    filtersEnabled: false,
     sortOrder: 20,
   },
   {
@@ -59,7 +59,7 @@ export const DEFAULT_DASHBOARDS = [
     title: "Билеты (базовый)",
     description: "Отслеживание билетов",
     datalensId: "3jbj88gnek4un",
-    filtersEnabled: true,
+    filtersEnabled: false,
     sortOrder: 30,
   },
   {
@@ -68,7 +68,7 @@ export const DEFAULT_DASHBOARDS = [
     title: "Все категории (базовый)",
     description: "Отслеживание всех категорий",
     datalensId: "euo4f8jr1ff8y",
-    filtersEnabled: true,
+    filtersEnabled: false,
     sortOrder: 40,
   },
 ];
