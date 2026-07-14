@@ -1011,6 +1011,10 @@ a:focus-visible {
 }
 
 @media (max-width: 980px) {
+  .client-view-tabs {
+    position: static;
+  }
+
   .form-grid,
   .client-row-grid,
   .summary-line,

@@ -14,6 +14,7 @@ const state = {
   filters: {
     category: "",
     eventValue: "",
+    statusCategory: "",
   },
   notice: null,
 };
@@ -31,6 +32,16 @@ const FILTER_CATEGORIES = [
   "Партер 1 Центр",
   "Партер 2 Общая",
   "Партер 3 Общая",
+];
+const STATUS_CATEGORY_PARAM = "Measure Names";
+const STATUS_CATEGORIES = [
+  { label: "Все", value: "" },
+  { label: "VIP", value: "VIP" },
+  { label: "Балкон Общая", value: "Balkon" },
+  { label: "Партер 1 Фланг", value: "Parter_flang" },
+  { label: "Партер 1 Центр", value: "Parter_centr" },
+  { label: "Партер 2 Общая", value: "Parter_2" },
+  { label: "Партер 3 Общая", value: "Parter_3" },
 ];
 const FILTER_EVENTS = buildEventOptions("2026-05-28", "2026-07-31");
 const PLANETRA_LOGO_SRC = "/assets/planetra.png";
@@ -304,8 +315,8 @@ function buildDashboardUrl(dashboard) {
       ensureDefaultFilters();
       url.searchParams.set(FILTER_PARAMS.event, state.filters.eventValue);
       url.searchParams.set(FILTER_PARAMS.category, state.filters.category);
-    } else if (tabHasCategoryFilter(activeTab)) {
-      url.searchParams.set(FILTER_PARAMS.category, state.filters.category);
+    } else if (tabHasCategoryFilter(activeTab) && state.filters.statusCategory) {
+      url.searchParams.set(STATUS_CATEGORY_PARAM, state.filters.statusCategory);
     }
 
     return url.toString();
@@ -475,9 +486,10 @@ function renderClient() {
   const design = mergeDesign(state.clientData?.client?.design);
   const headerDesign = clientHeaderDesign(rawClientName, design);
   const hasFilters = tabHasSalesFilters(activeTab) || tabHasCategoryFilter(activeTab);
+  const topbarHeight = tabHasSalesFilters(activeTab) ? "114px" : "94px";
 
   app.innerHTML = `
-    <section class="client-shell" data-theme="${escapeHtml(normalizeTheme(state.uiTheme))}" style="${escapeHtml(`${designStyle(design)}; --client-topbar-height: ${hasFilters ? "114px" : "90px"}`)}">
+    <section class="client-shell" data-theme="${escapeHtml(normalizeTheme(state.uiTheme))}" style="${escapeHtml(`${designStyle(design)}; --client-topbar-height: ${topbarHeight}`)}">
       <header class="topbar client-topbar ${hasFilters ? "has-filters" : "no-filters"}">
         <div class="topbar-title">
           ${renderBrandMark(headerDesign, clientName)}
@@ -550,10 +562,10 @@ function renderClientFilters() {
   return `
     <section class="client-filters client-category-filter" aria-label="Фильтры дашборда">
       <div class="field">
-        <label for="client-category-filter">Выбор категории</label>
-        <select id="client-category-filter" data-action="filter-category">
-          ${FILTER_CATEGORIES.map(
-            (category) => `<option value="${escapeHtml(category)}" ${category === state.filters.category ? "selected" : ""}>${escapeHtml(category || "Все")}</option>`,
+        <label for="client-status-category-filter">Выбор категории</label>
+        <select id="client-status-category-filter" data-action="filter-status-category">
+          ${STATUS_CATEGORIES.map(
+            (category) => `<option value="${escapeHtml(category.value)}" ${category.value === state.filters.statusCategory ? "selected" : ""}>${escapeHtml(category.label)}</option>`,
           ).join("")}
         </select>
       </div>
@@ -1390,6 +1402,11 @@ document.addEventListener("change", (event) => {
 
   if (control.dataset.action === "filter-category") {
     state.filters.category = control.value;
+    render();
+  }
+
+  if (control.dataset.action === "filter-status-category") {
+    state.filters.statusCategory = control.value;
     render();
   }
 
