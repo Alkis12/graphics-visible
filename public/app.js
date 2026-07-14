@@ -13,6 +13,7 @@ const state = {
   modal: null,
   filters: {
     category: "",
+    eventValue: "",
   },
   notice: null,
 };
@@ -20,6 +21,7 @@ const state = {
 const PASSWORD_ALPHABET = "ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz23456789!@#$%";
 const FILTER_PARAMS = {
   category: "ticket_category_tdzf",
+  event: "event_id_internal_9r0j",
 };
 const FILTER_CATEGORIES = [
   "",
@@ -30,6 +32,7 @@ const FILTER_CATEGORIES = [
   "Партер 2 Общая",
   "Партер 3 Общая",
 ];
+const FILTER_EVENTS = buildEventOptions("2026-05-28", "2026-07-31");
 const PLANETRA_LOGO_SRC = "/assets/planetra.png";
 const THEME_STORAGE_KEY = "graphicsVisibleTheme";
 const THEMES = ["dark", "light"];
@@ -101,6 +104,24 @@ function storeTheme(theme) {
 }
 
 state.uiTheme = readStoredTheme();
+
+function buildEventOptions(startDate, endDate) {
+  const options = [];
+  const cursor = dateFromKey(startDate);
+  const end = dateFromKey(endDate);
+
+  while (cursor <= end) {
+    const day = cursor.getDay();
+    if (day !== 1) {
+      const date = dateKey(cursor);
+      const time = day === 0 ? "18:00:00" : "20:00:00";
+      options.push(`${date} ${time}`);
+    }
+    cursor.setDate(cursor.getDate() + 1);
+  }
+
+  return options;
+}
 
 function escapeHtml(value) {
   return String(value ?? "")
@@ -210,6 +231,10 @@ function tabHasCategoryFilter(tab) {
   return normalizedText(tab?.title).includes("статус билетов");
 }
 
+function tabHasSalesFilters(tab) {
+  return normalizedText(tab?.title).includes("отслеживание метрик продаж");
+}
+
 function clientHeaderDesign(name, design) {
   if (!isOdeonClient(name)) {
     return design;
@@ -219,6 +244,47 @@ function clientHeaderDesign(name, design) {
     ...design,
     brandText: "Театр",
   };
+}
+
+function dateFromKey(value) {
+  const [year, month, day] = value.split("-").map(Number);
+  return new Date(year, month - 1, day);
+}
+
+function dateKey(date) {
+  return [
+    date.getFullYear(),
+    String(date.getMonth() + 1).padStart(2, "0"),
+    String(date.getDate()).padStart(2, "0"),
+  ].join("-");
+}
+
+function formatEventLabel(value) {
+  const date = value.slice(0, 10);
+  const weekday = new Intl.DateTimeFormat("ru-RU", { weekday: "short" }).format(dateFromKey(date));
+  const [year, month, day] = date.split("-");
+  return `${day}.${month}.${year} (${weekday})`;
+}
+
+function formatTodayNote() {
+  const today = new Date();
+  const date = new Intl.DateTimeFormat("ru-RU", {
+    day: "2-digit",
+    month: "2-digit",
+  }).format(today);
+  const weekday = new Intl.DateTimeFormat("ru-RU", { weekday: "short" }).format(today).replace(".", "");
+  return `сегодня ${date}, ${weekday}`;
+}
+
+function ensureDefaultFilters() {
+  if (state.filters.eventValue) {
+    return;
+  }
+
+  const today = dateKey(new Date());
+  const todayEvent = FILTER_EVENTS.find((eventValue) => eventValue.startsWith(today));
+  const nextEvent = FILTER_EVENTS.find((eventValue) => eventValue.slice(0, 10) >= today);
+  state.filters.eventValue = todayEvent || nextEvent || FILTER_EVENTS[0] || "";
 }
 
 function buildDashboardUrl(dashboard) {
@@ -233,7 +299,12 @@ function buildDashboardUrl(dashboard) {
     url.searchParams.set("_no_controls", "1");
     url.searchParams.set("_theme", normalizeTheme(state.uiTheme));
 
-    if (tabHasCategoryFilter(clientDashboardTabs().find((tab) => tab.id === state.activeClientTab))) {
+    const activeTab = clientDashboardTabs().find((tab) => tab.id === state.activeClientTab);
+    if (tabHasSalesFilters(activeTab)) {
+      ensureDefaultFilters();
+      url.searchParams.set(FILTER_PARAMS.event, state.filters.eventValue);
+      url.searchParams.set(FILTER_PARAMS.category, state.filters.category);
+    } else if (tabHasCategoryFilter(activeTab)) {
       url.searchParams.set(FILTER_PARAMS.category, state.filters.category);
     }
 
@@ -403,7 +474,7 @@ function renderClient() {
   const clientName = displayClientName(rawClientName);
   const design = mergeDesign(state.clientData?.client?.design);
   const headerDesign = clientHeaderDesign(rawClientName, design);
-  const hasFilters = tabHasCategoryFilter(activeTab);
+  const hasFilters = tabHasSalesFilters(activeTab) || tabHasCategoryFilter(activeTab);
 
   app.innerHTML = `
     <section class="client-shell" data-theme="${escapeHtml(normalizeTheme(state.uiTheme))}" style="${escapeHtml(`${designStyle(design)}; --client-topbar-height: ${hasFilters ? "114px" : "90px"}`)}">
@@ -450,6 +521,32 @@ function renderClientDashboards(dashboards) {
 }
 
 function renderClientFilters() {
+  const activeTab = clientDashboardTabs().find((tab) => tab.id === state.activeClientTab);
+  if (tabHasSalesFilters(activeTab)) {
+    ensureDefaultFilters();
+    return `
+      <section class="client-filters" aria-label="Фильтры дашборда">
+        <div class="field">
+          <label for="client-event-filter">Дата события</label>
+          <select id="client-event-filter" data-action="filter-event">
+            ${FILTER_EVENTS.map(
+              (eventValue) => `<option value="${escapeHtml(eventValue)}" ${eventValue === state.filters.eventValue ? "selected" : ""}>${escapeHtml(formatEventLabel(eventValue))}</option>`,
+            ).join("")}
+          </select>
+          <div class="field-note">${escapeHtml(formatTodayNote())}</div>
+        </div>
+        <div class="field">
+          <label for="client-category-filter">Категория билета</label>
+          <select id="client-category-filter" data-action="filter-category">
+            ${FILTER_CATEGORIES.map(
+              (category) => `<option value="${escapeHtml(category)}" ${category === state.filters.category ? "selected" : ""}>${escapeHtml(category || "Все")}</option>`,
+            ).join("")}
+          </select>
+        </div>
+      </section>
+    `;
+  }
+
   return `
     <section class="client-filters client-category-filter" aria-label="Фильтры дашборда">
       <div class="field">
@@ -462,6 +559,25 @@ function renderClientFilters() {
       </div>
     </section>
   `;
+}
+
+function shiftEventFilter(step) {
+  ensureDefaultFilters();
+
+  const currentIndex = FILTER_EVENTS.indexOf(state.filters.eventValue);
+  if (currentIndex < 0) {
+    state.filters.eventValue = FILTER_EVENTS[0] || "";
+    render();
+    return;
+  }
+
+  const nextIndex = Math.min(Math.max(currentIndex + step, 0), FILTER_EVENTS.length - 1);
+  if (nextIndex === currentIndex) {
+    return;
+  }
+
+  state.filters.eventValue = FILTER_EVENTS[nextIndex];
+  render();
 }
 
 function renderClientDashboard(dashboard) {
@@ -1277,6 +1393,11 @@ document.addEventListener("change", (event) => {
     render();
   }
 
+  if (control.dataset.action === "filter-event") {
+    state.filters.eventValue = control.value;
+    render();
+  }
+
   if (control.dataset.action === "select-admin-client") {
     state.selectedAdminClientId = control.value;
     state.selectedAdminDashboardTabId = "";
@@ -1329,6 +1450,21 @@ document.addEventListener("change", (event) => {
       textInput.value = control.value;
     }
   }
+});
+
+document.addEventListener("keydown", (event) => {
+  const activeTab = state.user?.role === "client" ? clientDashboardTabs().find((tab) => tab.id === state.activeClientTab) : null;
+  if (state.user?.role !== "client" || !tabHasSalesFilters(activeTab) || !["ArrowLeft", "ArrowRight"].includes(event.key)) {
+    return;
+  }
+
+  const activeElement = document.activeElement;
+  if (activeElement && ["INPUT", "SELECT", "TEXTAREA"].includes(activeElement.tagName)) {
+    return;
+  }
+
+  event.preventDefault();
+  shiftEventFilter(event.key === "ArrowRight" ? 1 : -1);
 });
 
 document.addEventListener("click", async (event) => {
