@@ -534,6 +534,48 @@ a:focus-visible {
   background: var(--frame-bg);
 }
 
+.status-chart-wrap {
+  position: relative;
+  display: grid;
+  grid-template-rows: minmax(0, 1fr) auto;
+  gap: 8px;
+  padding: 18px 18px 12px;
+}
+
+.status-chart-canvas-wrap {
+  position: relative;
+  min-width: 0;
+  min-height: 0;
+}
+
+.status-chart-canvas {
+  width: 100% !important;
+  height: 100% !important;
+}
+
+.status-chart-message {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  display: grid;
+  place-items: center;
+  color: var(--muted);
+}
+
+.status-chart-message[hidden] {
+  display: none;
+}
+
+.status-chart-message.is-error {
+  color: var(--danger);
+}
+
+.status-chart-source {
+  justify-self: start;
+  color: var(--muted);
+  font-size: 13px;
+}
+
 .dashboard-stack {
   display: grid;
   gap: 22px;

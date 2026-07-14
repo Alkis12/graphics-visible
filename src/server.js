@@ -21,6 +21,7 @@ import { hashPassword, normalizeUsername, verifyPassword } from "./security.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const publicDir = path.resolve(__dirname, "..", "public");
+const chartJsDir = path.resolve(__dirname, "..", "node_modules", "chart.js", "dist");
 
 const app = express();
 
@@ -91,6 +92,7 @@ app.use(
   }),
 );
 
+app.use("/vendor/chart.js", express.static(chartJsDir));
 app.use(express.static(publicDir, { extensions: ["html"] }));
 
 function saveSession(req) {
@@ -601,6 +603,75 @@ app.get(
         .filter((tab) => !allowedDashboardIds || tab.dashboards.length),
       dashboards: dashboards.map(serializeDashboard),
     });
+  }),
+);
+
+app.get(
+  "/api/dashboards/:id/chart-data",
+  requireAuth,
+  asyncHandler(async (req, res) => {
+    const db = await getDb();
+    const dashboardId = objectIdFromParam(req.params.id);
+    const dashboardQuery = { _id: dashboardId, isActive: { $ne: false } };
+
+    if (req.session.user.role !== "admin") {
+      const clientId = new ObjectId(req.session.user.clientId);
+      const user = await db.collection("users").findOne({
+        _id: new ObjectId(req.session.user.id),
+        role: "client",
+        clientId,
+        isActive: { $ne: false },
+      });
+      if (!user) {
+        res.status(403).json({ error: "Доступ отключен" });
+        return;
+      }
+
+      const allowedDashboardIds = dashboardAccessIds(user);
+      if (allowedDashboardIds && !allowedDashboardIds.some((id) => id.equals(dashboardId))) {
+        res.status(403).json({ error: "Нет доступа к графику" });
+        return;
+      }
+      dashboardQuery.clientId = clientId;
+    }
+
+    const dashboard = await db.collection("dashboards").findOne(dashboardQuery);
+    if (!dashboard) {
+      res.status(404).json({ error: "График не найден" });
+      return;
+    }
+
+    const datalensId = normalizeDatalensId(dashboard.datalensId || dashboard.sourceInput || dashboard.url);
+    const upstream = await fetch("https://datalens.yandex/charts/api/run", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        id: datalensId,
+        params: {},
+        responseOptions: { includeConfig: false, includeLogs: false },
+      }),
+      signal: AbortSignal.timeout(20_000),
+    });
+    if (!upstream.ok) {
+      const error = new Error(`DataLens returned ${upstream.status}`);
+      error.status = 502;
+      throw error;
+    }
+
+    const payload = await upstream.json();
+    const rawSeries = Array.isArray(payload?.data?.series?.data) ? payload.data.series.data : [];
+    const series = rawSeries.map((item) => ({
+      name: cleanString(item.name),
+      color: cleanString(item.color),
+      data: Array.isArray(item.data)
+        ? item.data
+            .map((point) => ({ x: Number(point.x), y: Number(point.y) }))
+            .filter((point) => Number.isFinite(point.x) && Number.isFinite(point.y))
+        : [],
+    }));
+
+    res.set("Cache-Control", "private, max-age=60");
+    res.json({ dashboardId: String(dashboard._id), series });
   }),
 );
 

@@ -33,7 +33,6 @@ const FILTER_CATEGORIES = [
   "Партер 2 Общая",
   "Партер 3 Общая",
 ];
-const STATUS_CATEGORY_PARAM = "Measure Names";
 const STATUS_CATEGORIES = [
   { label: "Все", value: "" },
   { label: "VIP", value: "VIP" },
@@ -44,6 +43,8 @@ const STATUS_CATEGORIES = [
   { label: "Партер 3 Общая", value: "Parter_3" },
 ];
 const FILTER_EVENTS = buildEventOptions("2026-05-28", "2026-07-31");
+const statusChartCache = new Map();
+const statusChartInstances = new Map();
 const PLANETRA_LOGO_SRC = "/assets/planetra.png";
 const THEME_STORAGE_KEY = "graphicsVisibleTheme";
 const THEMES = ["dark", "light"];
@@ -315,8 +316,6 @@ function buildDashboardUrl(dashboard) {
       ensureDefaultFilters();
       url.searchParams.set(FILTER_PARAMS.event, state.filters.eventValue);
       url.searchParams.set(FILTER_PARAMS.category, state.filters.category);
-    } else if (tabHasCategoryFilter(activeTab) && state.filters.statusCategory) {
-      url.searchParams.set(STATUS_CATEGORY_PARAM, state.filters.statusCategory);
     }
 
     return url.toString();
@@ -423,6 +422,8 @@ async function boot() {
 }
 
 function render() {
+  destroyStatusCharts();
+
   if (!state.user) {
     renderLogin();
     return;
@@ -524,6 +525,10 @@ function renderClient() {
       </div>
     </section>
   `;
+
+  if (tabHasCategoryFilter(activeTab)) {
+    renderStatusCharts(dashboards);
+  }
 }
 
 function renderClientDashboards(dashboards) {
@@ -594,6 +599,8 @@ function shiftEventFilter(step) {
 
 function renderClientDashboard(dashboard) {
   const dashboardUrl = buildDashboardUrl(dashboard);
+  const activeTab = clientDashboardTabs().find((tab) => tab.id === state.activeClientTab);
+  const isStatusChart = tabHasCategoryFilter(activeTab);
 
   return `
     <section class="dashboard-panel">
@@ -605,11 +612,125 @@ function renderClientDashboard(dashboard) {
             : ""
         }
       </div>
-      <section class="dashboard-frame-wrap">
-        <iframe class="dashboard-frame" title="${escapeHtml(dashboard.title)}" src="${escapeHtml(dashboardUrl)}" allowfullscreen></iframe>
-      </section>
+      ${
+        isStatusChart
+          ? `<section class="dashboard-frame-wrap status-chart-wrap" data-status-dashboard="${escapeHtml(dashboard.id)}">
+              <div class="status-chart-message">Загрузка графика...</div>
+              <div class="status-chart-canvas-wrap">
+                <canvas class="status-chart-canvas" aria-label="${escapeHtml(dashboard.title)}"></canvas>
+              </div>
+              <a class="status-chart-source" href="${escapeHtml(dashboardUrl)}" target="_blank" rel="noopener">Данные DataLens</a>
+            </section>`
+          : `<section class="dashboard-frame-wrap">
+              <iframe class="dashboard-frame" title="${escapeHtml(dashboard.title)}" src="${escapeHtml(dashboardUrl)}" allowfullscreen></iframe>
+            </section>`
+      }
     </section>
   `;
+}
+
+function destroyStatusCharts() {
+  for (const chart of statusChartInstances.values()) {
+    chart.destroy();
+  }
+  statusChartInstances.clear();
+}
+
+function chartDate(value) {
+  return new Intl.DateTimeFormat("ru-RU", {
+    day: "2-digit",
+    month: "2-digit",
+    year: "2-digit",
+  }).format(new Date(Number(value)));
+}
+
+async function renderStatusCharts(dashboards) {
+  if (!window.Chart) {
+    return;
+  }
+
+  await Promise.all(
+    dashboards.map(async (dashboard) => {
+      const container = document.querySelector(`[data-status-dashboard="${CSS.escape(dashboard.id)}"]`);
+      if (!container) {
+        return;
+      }
+
+      const message = container.querySelector(".status-chart-message");
+      try {
+        let payload = statusChartCache.get(dashboard.id);
+        if (!payload) {
+          payload = await api(`/api/dashboards/${dashboard.id}/chart-data`);
+          statusChartCache.set(dashboard.id, payload);
+        }
+        if (!container.isConnected) {
+          return;
+        }
+
+        const selected = state.filters.statusCategory;
+        const visibleSeries = selected ? payload.series.filter((series) => series.name === selected) : payload.series;
+        if (!visibleSeries.length) {
+          throw new Error("Для выбранной категории нет данных");
+        }
+
+        container.dataset.visibleSeries = visibleSeries.map((series) => series.name).join(",");
+        const canvas = container.querySelector(".status-chart-canvas");
+        const shellStyles = getComputedStyle(document.querySelector(".client-shell"));
+        const mutedColor = shellStyles.getPropertyValue("--muted").trim() || "#999999";
+        const gridColor = shellStyles.getPropertyValue("--line").trim() || "#333333";
+        message.hidden = true;
+
+        const chart = new window.Chart(canvas, {
+          type: "line",
+          data: {
+            datasets: visibleSeries.map((series) => ({
+              label: series.name,
+              data: series.data,
+              borderColor: series.color,
+              backgroundColor: series.color,
+              borderWidth: 2,
+              pointRadius: 0,
+              pointHoverRadius: 4,
+              tension: 0,
+            })),
+          },
+          options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            animation: false,
+            interaction: { mode: "index", intersect: false },
+            plugins: {
+              legend: {
+                position: "bottom",
+                labels: { color: mutedColor, usePointStyle: true, pointStyle: "line", padding: 20 },
+              },
+              tooltip: {
+                callbacks: { title: (items) => (items[0] ? chartDate(items[0].parsed.x) : "") },
+              },
+            },
+            scales: {
+              x: {
+                type: "linear",
+                grid: { color: gridColor },
+                ticks: { color: mutedColor, maxTicksLimit: 10, callback: (value) => chartDate(value) },
+              },
+              y: {
+                min: 0,
+                max: 100,
+                grid: { color: gridColor },
+                ticks: { color: mutedColor },
+              },
+            },
+          },
+        });
+        statusChartInstances.set(dashboard.id, chart);
+      } catch (error) {
+        message.hidden = false;
+        message.textContent = error.message || "Не удалось загрузить график";
+        message.classList.add("is-error");
+      }
+    }),
+  );
 }
 
 function renderAdmin() {
