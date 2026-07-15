@@ -2,7 +2,7 @@ $ErrorActionPreference = "Stop"
 
 $server = $env:SERVER_SSH
 if (-not $server) {
-  $server = "deploy-user@example-host.invalid"
+  throw "Set SERVER_SSH to the SSH destination (for example, user@host)."
 }
 
 $localPort = $env:LOCAL_MONGO_PORT

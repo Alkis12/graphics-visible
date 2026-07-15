@@ -25,8 +25,10 @@ def now() -> datetime:
 
 
 def mongo_db():
-    mongo_url = os.getenv("MONGO_URL", "mongodb://127.0.0.1:27017/planetra_dashboards")
-    mongo_db_name = os.getenv("MONGO_DB", "planetra_dashboards")
+    mongo_url = os.getenv("MONGO_URL")
+    if not mongo_url:
+        raise RuntimeError("Missing required environment variable: MONGO_URL")
+    mongo_db_name = os.getenv("MONGO_DB", "graphics_visible")
     return MongoClient(mongo_url)[mongo_db_name]
 
 

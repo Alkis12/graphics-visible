@@ -1,9 +1,7 @@
 #!/usr/bin/env bash
 set -Eeuo pipefail
 
-PROD_HOST="${PROD_HOST:-deploy-user@example-host.invalid}"
-PROD_HOSTNAME="${PROD_HOSTNAME:-production-host}"
-PROD_APP_DIR="${PROD_APP_DIR:-/srv/graphics-visible}"
+DEPLOY_TARGET="${DEPLOY_TARGET:-local}"
 
 if [[ -z "${SSH_BIN:-}" ]]; then
   SSH_BIN="ssh"
@@ -12,22 +10,17 @@ if [[ -z "${SSH_BIN:-}" ]]; then
   fi
 fi
 
-if [[ "${DEPLOY_TARGET:-prod}" == "prod" && "$(hostname)" != "$PROD_HOSTNAME" ]]; then
-  remote_env=""
-  for key in ODEON_USERNAME ODEON_PASSWORD; do
-    value="${!key:-}"
-    if [[ -n "$value" ]]; then
-      remote_env+="${key}=$(printf "%q" "$value") "
-    fi
-  done
-
+if [[ "$DEPLOY_TARGET" == "remote" ]]; then
+  PROD_HOST="${PROD_HOST:?Set PROD_HOST to the SSH destination}"
+  PROD_APP_DIR="${PROD_APP_DIR:?Set PROD_APP_DIR to the application directory on the server}"
+  remote_app_dir="$(printf "%q" "$PROD_APP_DIR")"
   echo "Deploying on $PROD_HOST..."
-  "$SSH_BIN" "$PROD_HOST" "cd '$PROD_APP_DIR' && git pull --ff-only origin main && ${remote_env}./redeploy.sh"
+  "$SSH_BIN" "$PROD_HOST" "cd $remote_app_dir && git pull --ff-only origin main && DEPLOY_TARGET=local ./redeploy.sh"
   exit 0
 fi
 
 APP_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-NETWORK_NAME="external-network"
+EXTERNAL_NETWORK_NAME="${EXTERNAL_NETWORK_NAME:-}"
 
 cd "$APP_DIR"
 
@@ -75,33 +68,34 @@ set_env_var() {
 
 if [[ ! -f .env ]]; then
   echo "Creating .env with generated production secrets..."
+  mongo_db="graphics_visible"
+  mongo_root_user="graphics_visible_admin"
+  mongo_root_password="$(generate_secret)"
   {
     echo "APP_HOST=127.0.0.1"
     echo "APP_PORT=8080"
-    echo "MONGO_DB=planetra_dashboards"
-    echo "MONGO_ROOT_USER=dashboards_admin"
-    echo "MONGO_ROOT_PASSWORD=$(generate_secret)"
-    echo "MONGO_HOST=0.0.0.0"
+    echo "MONGO_DB=${mongo_db}"
+    echo "MONGO_ROOT_USER=${mongo_root_user}"
+    echo "MONGO_ROOT_PASSWORD=${mongo_root_password}"
+    echo "MONGO_HOST=127.0.0.1"
     echo "MONGO_PORT=27018"
     echo "SESSION_SECRET=$(generate_secret)"
     echo "TRUST_PROXY=true"
     echo "COOKIE_SECURE=true"
-    echo "PUBLIC_MONGO_USERNAME=dashboards_user"
-    echo "PUBLIC_MONGO_PASSWORD=$(generate_secret)"
   } > .env
   chmod 600 .env
 fi
 
-ensure_env_var "MONGO_HOST" "0.0.0.0"
+set_env_var "MONGO_HOST" "${MONGO_HOST:-127.0.0.1}"
 ensure_env_var "MONGO_PORT" "27018"
-ensure_env_var "PUBLIC_MONGO_USERNAME" "dashboards_user"
-ensure_env_var "PUBLIC_MONGO_PASSWORD" "$(generate_secret)"
 set_env_var "ODEON_USERNAME" "${ODEON_USERNAME:-odeon_manager}"
-if [[ -n "${ODEON_PASSWORD:-}" ]]; then
-  set_env_var "ODEON_PASSWORD" "$ODEON_PASSWORD"
-else
-  ensure_env_var "ODEON_PASSWORD" ""
-fi
+
+for required_key in MONGO_ROOT_PASSWORD SESSION_SECRET; do
+  if ! grep -Eq "^${required_key}=.+" .env; then
+    echo "Missing required ${required_key} in .env" >&2
+    exit 1
+  fi
+done
 
 if docker ps -a --format '{{.Names}}' | grep -Fxq "graphics_visible"; then
   EXISTING_APP_PROJECT="$(docker inspect -f '{{ index .Config.Labels "com.docker.compose.project" }}' graphics_visible 2>/dev/null || true)"
@@ -116,10 +110,10 @@ docker compose up -d --build
 
 APP_CONTAINER="$(docker compose ps -q app)"
 
-if [[ -n "$APP_CONTAINER" ]] && docker network inspect "$NETWORK_NAME" >/dev/null 2>&1; then
-  if ! docker inspect "$APP_CONTAINER" --format '{{json .NetworkSettings.Networks}}' | grep -q "\"$NETWORK_NAME\""; then
-    echo "Connecting app container to $NETWORK_NAME..."
-    docker network connect "$NETWORK_NAME" "$APP_CONTAINER" || true
+if [[ -n "$APP_CONTAINER" && -n "$EXTERNAL_NETWORK_NAME" ]] && docker network inspect "$EXTERNAL_NETWORK_NAME" >/dev/null 2>&1; then
+  if ! docker inspect "$APP_CONTAINER" --format '{{json .NetworkSettings.Networks}}' | grep -q "\"$EXTERNAL_NETWORK_NAME\""; then
+    echo "Connecting app container to $EXTERNAL_NETWORK_NAME..."
+    docker network connect "$EXTERNAL_NETWORK_NAME" "$APP_CONTAINER" || true
   fi
 fi
 
@@ -128,8 +122,3 @@ docker ps --filter "name=graphics_visible" --format "table {{.Names}}\t{{.Image}
 
 echo "Seeding default users and Odeon dashboards..."
 docker compose exec -T app npm run seed
-
-set -a
-source .env
-set +a
-

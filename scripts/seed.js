@@ -1,10 +1,8 @@
 import { ObjectId } from "mongodb";
 import { DEFAULT_CLIENT, DEFAULT_DASHBOARD_TABS, DEFAULT_DASHBOARDS } from "../src/defaultDashboards.js";
-import { config } from "../src/config.js";
 import { ensureIndexes, getDb } from "../src/db.js";
 import { generatePassword, hashPassword, normalizeUsername } from "../src/security.js";
 
-const RESET_PASSWORDS = process.env.RESET_PASSWORDS === "1" || process.argv.includes("--reset-passwords");
 const now = new Date();
 const SEEDED_DASHBOARD_TITLE_MIGRATIONS = {
   "operational-failures": ["Проверка сбоев"],
@@ -23,9 +21,9 @@ function env(name, fallback) {
 async function upsertAdmin(db) {
   const username = normalizeUsername(env("ADMIN_USERNAME", "admin"));
   const existing = await db.collection("users").findOne({ role: "admin" });
-  const password = env("ADMIN_PASSWORD", existing && !RESET_PASSWORDS ? null : generatePassword());
 
   if (!existing) {
+    const password = generatePassword();
     await db.collection("users").insertOne({
       username,
       passwordHash: await hashPassword(password),
@@ -34,7 +32,7 @@ async function upsertAdmin(db) {
       createdAt: now,
       updatedAt: now,
     });
-    return { login: username, password };
+    return { login: username, created: true, oneTimePassword: password };
   }
 
   const patch = {
@@ -43,12 +41,8 @@ async function upsertAdmin(db) {
     updatedAt: now,
   };
 
-  if (password) {
-    patch.passwordHash = await hashPassword(password);
-  }
-
   await db.collection("users").updateOne({ _id: existing._id }, { $set: patch });
-  return { login: username, password: password || "(оставлен текущий пароль)" };
+  return { login: username, created: false };
 }
 
 async function upsertOdeon(db) {
@@ -73,12 +67,13 @@ async function upsertOdeon(db) {
   const existing =
     (await db.collection("users").findOne({ role: "client", clientId, username })) ||
     (await db.collection("users").findOne({ role: "client", clientId, allowedDashboardIds: { $exists: false } }));
-  const password = env("ODEON_PASSWORD", existing && !RESET_PASSWORDS ? null : generatePassword());
+  let oneTimePassword;
 
   if (!existing) {
+    oneTimePassword = generatePassword();
     await db.collection("users").insertOne({
       username,
-      passwordHash: await hashPassword(password),
+      passwordHash: await hashPassword(oneTimePassword),
       role: "client",
       clientId,
       isActive: true,
@@ -92,10 +87,6 @@ async function upsertOdeon(db) {
       isActive: true,
       updatedAt: now,
     };
-
-    if (password) {
-      patch.passwordHash = await hashPassword(password);
-    }
 
     await db.collection("users").updateOne({ _id: existing._id }, { $set: patch, $unset: { allowedDashboardIds: "" } });
   }
@@ -175,41 +166,10 @@ async function upsertOdeon(db) {
     },
   });
 
-  return { login: username, password: password || "(оставлен текущий пароль)" };
-}
-
-async function upsertPublicMongoUser(db) {
-  const username = env("PUBLIC_MONGO_USERNAME", "");
-  const password = env("PUBLIC_MONGO_PASSWORD", "");
-
-  if (!username || !password) {
-    return null;
-  }
-
-  const user = {
-    pwd: password,
-    roles: [{ role: "readWrite", db: config.mongoDb }],
-  };
-
-  try {
-    await db.command({
-      updateUser: username,
-      ...user,
-    });
-  } catch (error) {
-    if (error.codeName !== "UserNotFound" && error.code !== 11) {
-      throw error;
-    }
-
-    await db.command({
-      createUser: username,
-      ...user,
-    });
-  }
-
   return {
-    username,
-    authSource: config.mongoDb,
+    login: username,
+    created: !existing,
+    ...(oneTimePassword ? { oneTimePassword } : {}),
   };
 }
 
@@ -218,7 +178,6 @@ await ensureIndexes(db);
 
 const admin = await upsertAdmin(db);
 const odeon = await upsertOdeon(db);
-const publicMongo = await upsertPublicMongoUser(db);
 
 console.log("Seed completed.");
 console.log(
@@ -228,7 +187,6 @@ console.log(
       odeon,
       client: DEFAULT_CLIENT,
       dashboards: DEFAULT_DASHBOARDS.length,
-      publicMongo,
     },
     null,
     2,

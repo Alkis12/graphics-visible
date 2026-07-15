@@ -1,10 +1,9 @@
 import { config } from "../src/config.js";
 import { getDb } from "../src/db.js";
 import { DEFAULT_CLIENT } from "../src/defaultDashboards.js";
-import { hashPassword, normalizeUsername } from "../src/security.js";
+import { normalizeUsername } from "../src/security.js";
 
 const USERNAME = normalizeUsername(process.env.ODEON_PULSE_USERNAME || "odeon_pulse");
-const PASSWORD = process.env.ODEON_PULSE_PASSWORD;
 const DASHBOARD_KEYS = ["operational-failures", "daily-check"];
 
 const db = await getDb();
@@ -23,33 +22,33 @@ if (dashboards.length !== DASHBOARD_KEYS.length) {
   throw new Error(`Expected ${DASHBOARD_KEYS.length} dashboards, found ${dashboards.length}`);
 }
 
+const user = await db.collection("users").findOne({ username: USERNAME });
+if (!user) {
+  throw new Error(`User ${USERNAME} not found; create it in the admin interface first`);
+}
+
 const now = new Date();
 await db.collection("users").updateOne(
-  { username: USERNAME },
+  { _id: user._id },
   {
     $set: {
       username: USERNAME,
-      passwordHash: await hashPassword(PASSWORD),
       role: "client",
       clientId: client._id,
       allowedDashboardIds: dashboards.map((dashboard) => dashboard._id),
       isActive: true,
       updatedAt: now,
     },
-    $setOnInsert: {
-      createdAt: now,
-    },
   },
-  { upsert: true },
 );
 
 console.log(
   JSON.stringify(
     {
       username: USERNAME,
-      password: PASSWORD,
       client: client.name,
       dashboardKeys: DASHBOARD_KEYS,
+      passwordUpdated: false,
     },
     null,
     2,

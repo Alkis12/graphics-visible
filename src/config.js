@@ -7,13 +7,19 @@ function integerFromEnv(name, fallback) {
   return Number.isFinite(value) ? value : fallback;
 }
 
+function requiredEnv(name) {
+  const value = process.env[name]?.trim();
+  if (!value) {
+    throw new Error(`Missing required environment variable: ${name}`);
+  }
+  return value;
+}
+
 export const config = {
   port: integerFromEnv("PORT", 3000),
-  mongoUrl: process.env.MONGO_URL || "mongodb://127.0.0.1:27017/planetra_dashboards",
-  mongoDb: process.env.MONGO_DB || "planetra_dashboards",
-  sessionSecret:
-    process.env.SESSION_SECRET ||
-    "",
+  mongoUrl: requiredEnv("MONGO_URL"),
+  mongoDb: process.env.MONGO_DB || "graphics_visible",
+  sessionSecret: requiredEnv("SESSION_SECRET"),
   cookieSecure: process.env.COOKIE_SECURE === "true",
   trustProxy: process.env.TRUST_PROXY === "true",
   bcryptRounds: integerFromEnv("BCRYPT_ROUNDS", 12),

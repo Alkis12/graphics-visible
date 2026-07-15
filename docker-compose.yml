@@ -11,15 +11,12 @@ services:
       PORT: 80
       TRUST_PROXY: ${TRUST_PROXY:-false}
       COOKIE_SECURE: ${COOKIE_SECURE:-false}
-      SESSION_SECRET: ${SESSION_SECRET:-}
-      MONGO_DB: ${MONGO_DB:-planetra_dashboards}
-      MONGO_URL: ${MONGO_URL:-mongodb://${MONGO_ROOT_USER:-dashboards_admin}:${MONGO_ROOT_PASSWORD:-}@mongo:27017/${MONGO_DB:-planetra_dashboards}?authSource=admin}
+      SESSION_SECRET: ${SESSION_SECRET:?SESSION_SECRET is required}
+      MONGO_DB: ${MONGO_DB:-graphics_visible}
+      MONGO_URL: ${MONGO_URL:-mongodb://${MONGO_ROOT_USER:-graphics_visible_admin}:${MONGO_ROOT_PASSWORD:?MONGO_ROOT_PASSWORD is required}@mongo:27017/${MONGO_DB:-graphics_visible}?authSource=admin}
       ADMIN_USERNAME: ${ADMIN_USERNAME:-admin}
-      ADMIN_PASSWORD: ${ADMIN_PASSWORD:-}
       ODEON_USERNAME: ${ODEON_USERNAME:-odeon_manager}
-      ODEON_PASSWORD: ${ODEON_PASSWORD:-}
-      PUBLIC_MONGO_USERNAME: ${PUBLIC_MONGO_USERNAME:-dashboards_user}
-      PUBLIC_MONGO_PASSWORD: ${PUBLIC_MONGO_PASSWORD:-}
+      ODEON_PULSE_USERNAME: ${ODEON_PULSE_USERNAME:-odeon_pulse}
     ports:
       - "${APP_HOST:-127.0.0.1}:${APP_PORT:-8080}:80"
     networks:
@@ -39,8 +36,8 @@ services:
     environment:
       LOG_LEVEL: ${ETL_LOG_LEVEL:-INFO}
       ETL_POLL_SECONDS: ${ETL_POLL_SECONDS:-3}
-      MONGO_DB: ${MONGO_DB:-planetra_dashboards}
-      MONGO_URL: ${MONGO_URL:-mongodb://${MONGO_ROOT_USER:-dashboards_admin}:${MONGO_ROOT_PASSWORD:-}@mongo:27017/${MONGO_DB:-planetra_dashboards}?authSource=admin}
+      MONGO_DB: ${MONGO_DB:-graphics_visible}
+      MONGO_URL: ${MONGO_URL:-mongodb://${MONGO_ROOT_USER:-graphics_visible_admin}:${MONGO_ROOT_PASSWORD:?MONGO_ROOT_PASSWORD is required}@mongo:27017/${MONGO_DB:-graphics_visible}?authSource=admin}
       PLANETRA_DB_HOST: ${PLANETRA_DB_HOST:-}
       PLANETRA_DB_PORT: ${PLANETRA_DB_PORT:-}
       PLANETRA_DB_NAME: ${PLANETRA_DB_NAME:-}
@@ -54,8 +51,8 @@ services:
     container_name: graphics_visible_mongo
     restart: unless-stopped
     environment:
-      MONGO_INITDB_ROOT_USERNAME: ${MONGO_ROOT_USER:-dashboards_admin}
-      MONGO_INITDB_ROOT_PASSWORD: ${MONGO_ROOT_PASSWORD:-}
+      MONGO_INITDB_ROOT_USERNAME: ${MONGO_ROOT_USER:-graphics_visible_admin}
+      MONGO_INITDB_ROOT_PASSWORD: ${MONGO_ROOT_PASSWORD:?MONGO_ROOT_PASSWORD is required}
     volumes:
       - graphics_visible_mongo:/data/db
     ports:

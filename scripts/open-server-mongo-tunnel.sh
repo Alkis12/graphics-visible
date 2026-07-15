@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -Eeuo pipefail
 
-SERVER_SSH="${SERVER_SSH:-deploy-user@example-host.invalid}"
+SERVER_SSH="${SERVER_SSH:?Set SERVER_SSH to the SSH destination (for example, user@host)}"
 LOCAL_MONGO_PORT="${LOCAL_MONGO_PORT:-27018}"
 REMOTE_MONGO_PORT="${REMOTE_MONGO_PORT:-27018}"
 
