@@ -254,7 +254,7 @@ function clientHeaderDesign(name, design) {
 
   return {
     ...design,
-    brandText: "Театр",
+    brandText: "Планетра",
   };
 }
 
