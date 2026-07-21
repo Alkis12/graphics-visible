@@ -1,5 +1,24 @@
 # Graphics Visible
 
+Role-based analytics portal for publishing embedded business dashboards behind a configurable access layer.
+
+## Portfolio overview
+
+This repository is a sanitized, reusable version of a production system built for a business-planning and analytics company. The deployed solution replaced daily manual Excel reporting with live dashboards based on ticketing data.
+
+- 4 portal sections and 8 embedded DataLens dashboards
+- Used by 3 managers and 5 shareholders
+- Role-based access for administrators, clients, users, tabs, and individual dashboards
+- MongoDB-backed sessions and configuration
+- Optional Python ETL worker for external data ingestion
+- Docker Compose deployment with health checks and production-oriented defaults
+
+## Technology
+
+Node.js 20+, Express, MongoDB, JavaScript, Chart.js, Python ETL, Docker, and Docker Compose.
+
+## Documentation in Russian
+
 Веб-приложение для публикации аналитических дашбордов с разграничением доступа. Администратор управляет клиентами, пользователями, вкладками и доступными дашбордами; пользователи видят только назначенные им разделы.
 
 ## Возможности
